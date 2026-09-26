@@ -15,7 +15,13 @@ import {
   Dices, 
   LifeBuoy, 
   Utensils, 
-  Phone 
+  Phone,
+  Download,
+  Upload,
+  Database,
+  FileJson,
+  CheckCheck,
+  XCircle
 } from 'lucide-react';
 import { formatThaiDateTime } from '../utils/geo';
 
@@ -159,6 +165,109 @@ export default function AdminDashboardModal({
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
+  // ===== Export / Import Data =====
+  const [importStatus, setImportStatus] = useState(null); // null | { type: 'loading'|'success'|'error', text: string }
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Export ข้อมูลทั้งหมดเป็นไฟล์ JSON
+  const handleExportData = async () => {
+    setIsExporting(true);
+    try {
+      const [floodsRes, sosRes, donationsRes, centersRes, sheltersRes] = await Promise.all([
+        fetch('/api/floods').catch(() => null),
+        fetch('/api/sos').catch(() => null),
+        fetch('/api/donations').catch(() => null),
+        fetch('/api/rescue-centers').catch(() => null),
+        fetch('/api/shelters').catch(() => null),
+      ]);
+
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        version: '1.0',
+        floods: floodsRes?.ok ? await floodsRes.json() : [],
+        sos: sosRes?.ok ? await sosRes.json() : [],
+        donations: donationsRes?.ok ? await donationsRes.json() : [],
+        rescueCenters: centersRes?.ok ? await centersRes.json() : [],
+        shelters: sheltersRes?.ok ? await sheltersRes.json() : [],
+      };
+
+      // สร้างไฟล์ JSON แล้วให้ browser download
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `sakaeo-flood-backup-${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('เกิดข้อผิดพลาดในการ Export ข้อมูล: ' + err.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Import ข้อมูลจากไฟล์ JSON ที่ export ไว้
+  const handleImportData = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = ''; // reset input
+
+    setImportStatus({ type: 'loading', text: 'กำลังอ่านไฟล์...' });
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (!data.floods && !data.sos && !data.donations) {
+        setImportStatus({ type: 'error', text: 'ไฟล์ไม่ถูกต้อง — ต้องเป็นไฟล์ backup จากระบบนี้เท่านั้น' });
+        return;
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      const importCollection = async (items, endpoint) => {
+        for (const item of (items || [])) {
+          // ข้ามข้อมูลตัวอย่าง (isSample)
+          if (item.isSample) continue;
+          try {
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(item)
+            });
+            if (res.ok) successCount++;
+            else errorCount++;
+          } catch {
+            errorCount++;
+          }
+        }
+      };
+
+      setImportStatus({ type: 'loading', text: 'กำลังนำเข้าข้อมูลน้ำท่วม...' });
+      await importCollection(data.floods, '/api/floods');
+
+      setImportStatus({ type: 'loading', text: 'กำลังนำเข้าข้อมูล SOS...' });
+      await importCollection(data.sos, '/api/sos');
+
+      setImportStatus({ type: 'loading', text: 'กำลังนำเข้าจุดแจก/บริจาค...' });
+      await importCollection(data.donations, '/api/donations');
+
+      if (onRefreshAllData) onRefreshAllData();
+
+      setImportStatus({
+        type: 'success',
+        text: `นำเข้าข้อมูลสำเร็จ ${successCount} รายการ${errorCount > 0 ? ` (ล้มเหลว ${errorCount} รายการ)` : ''}`
+      });
+      setTimeout(() => setImportStatus(null), 6000);
+    } catch (err) {
+      setImportStatus({ type: 'error', text: 'อ่านไฟล์ไม่ได้ — ตรวจสอบว่าไฟล์เป็น JSON ที่ถูกต้อง' });
+    }
+  };
+
   const unreadFeedbackCount = feedbacks.filter(f => f.status !== 'read').length;
 
   return (
@@ -234,7 +343,19 @@ export default function AdminDashboardModal({
             }`}
           >
             <Key className="w-4 h-4" />
-            <span>ตั้งค่า Secret Key & รหัสผ่าน</span>
+            <span>Secret Key & รหัสผ่าน</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('backup')}
+            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+              activeTab === 'backup'
+                ? 'border-violet-400 text-violet-300'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            <span>Export / Import</span>
           </button>
         </div>
 
@@ -587,6 +708,122 @@ export default function AdminDashboardModal({
                 </div>
 
               </form>
+            </div>
+          )}
+
+          {/* TAB 4: EXPORT / IMPORT BACKUP */}
+          {activeTab === 'backup' && (
+            <div className="space-y-5 max-w-2xl mx-auto">
+              <div>
+                <h4 className="font-heading font-bold text-base text-white flex items-center gap-2">
+                  <Database className="w-5 h-5 text-violet-400" />
+                  สำรอง & กู้คืนข้อมูล (Backup & Restore)
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  Export ข้อมูลทั้งหมดเป็นไฟล์ JSON เก็บไว้ แล้วนำกลับมา Import ได้ทุกเมื่อ
+                </p>
+              </div>
+
+              {/* Status Indicator */}
+              {importStatus && (
+                <div className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border text-sm font-medium ${
+                  importStatus.type === 'loading' ? 'bg-blue-900/40 border-blue-700 text-blue-300' :
+                  importStatus.type === 'success' ? 'bg-emerald-900/40 border-emerald-700 text-emerald-300' :
+                  'bg-red-900/40 border-red-700 text-red-300'
+                }`}>
+                  {importStatus.type === 'loading' && <RefreshCw className="w-4 h-4 animate-spin shrink-0" />}
+                  {importStatus.type === 'success' && <CheckCheck className="w-4 h-4 shrink-0" />}
+                  {importStatus.type === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
+                  <span className="text-xs">{importStatus.text}</span>
+                </div>
+              )}
+
+              {/* Export Card */}
+              <div className="bg-slate-800/80 border border-violet-700/50 rounded-2xl p-5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-violet-500/20 border border-violet-500/40 flex items-center justify-center shrink-0">
+                    <Download className="w-5 h-5 text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-white text-sm">📤 Export — ดาวน์โหลดสำรองข้อมูล</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      ดาวน์โหลดข้อมูลทั้งหมด (จุดน้ำท่วม, SOS, จุดแจก) เป็นไฟล์ .json เก็บไว้ในเครื่อง
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleExportData}
+                  disabled={isExporting}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60"
+                >
+                  {isExporting ? (
+                    <><RefreshCw className="w-4 h-4 animate-spin" /><span>กำลัง Export...</span></>
+                  ) : (
+                    <><Download className="w-4 h-4" /><span>Export ข้อมูลทั้งหมด (.json)</span></>
+                  )}
+                </button>
+                <p className="text-[11px] text-slate-500">
+                  💡 แนะนำ: Export ทุกครั้งก่อน deploy โค้ดใหม่ขึ้น GitHub เพื่อป้องกันข้อมูลหาย
+                </p>
+              </div>
+
+              {/* Import Card */}
+              <div className="bg-slate-800/80 border border-amber-700/50 rounded-2xl p-5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                    <Upload className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-white text-sm">📥 Import — กู้คืนข้อมูล</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      อัปโหลดไฟล์ .json ที่ Export ไว้ก่อนหน้า เพื่อกู้คืนข้อมูลที่หายไปหลัง deploy
+                    </div>
+                  </div>
+                </div>
+
+                <label className="block w-full cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleImportData}
+                    className="hidden"
+                    disabled={importStatus?.type === 'loading'}
+                  />
+                  <div className={`w-full py-3 rounded-xl border-2 border-dashed font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+                    importStatus?.type === 'loading'
+                      ? 'border-slate-600 text-slate-500 cursor-not-allowed'
+                      : 'border-amber-600/60 text-amber-300 hover:border-amber-500 hover:bg-amber-900/20 active:scale-95'
+                  }`}>
+                    <FileJson className="w-4 h-4" />
+                    <span>{importStatus?.type === 'loading' ? 'กำลังนำเข้า...' : 'เลือกไฟล์ Backup (.json) เพื่อ Import'}</span>
+                  </div>
+                </label>
+
+                <div className="bg-amber-950/40 border border-amber-800/40 rounded-xl p-3 space-y-1.5">
+                  <p className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    ข้อควรระวังก่อน Import
+                  </p>
+                  <ul className="text-[11px] text-amber-200/70 space-y-1 list-disc list-inside">
+                    <li>ข้อมูลที่ Import จะถูก <strong>เพิ่มเข้า</strong> ไปในฐานข้อมูลปัจจุบัน ไม่ได้แทนที่</li>
+                    <li>ถ้า deploy ใหม่แล้วข้อมูลหาย → Import ได้เลย ข้อมูลจะกลับมา</li>
+                    <li>ข้อมูลตัวอย่าง (isSample) จะถูกข้ามไปอัตโนมัติ</li>
+                    <li>รองรับเฉพาะไฟล์ที่ Export จากระบบนี้เท่านั้น</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Workflow Guide */}
+              <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 space-y-2">
+                <p className="text-xs font-bold text-slate-300">📋 ขั้นตอนป้องกันข้อมูลหาย (ทำทุกครั้งก่อน deploy)</p>
+                <ol className="text-[11px] text-slate-400 space-y-1.5 list-decimal list-inside">
+                  <li>เข้า Admin Dashboard → แท็บ Export/Import</li>
+                  <li>กด <span className="text-violet-300 font-semibold">Export ข้อมูลทั้งหมด</span> → บันทึกไฟล์ไว้ในเครื่อง</li>
+                  <li>ลากโฟลเดอร์ <code className="bg-slate-700 px-1 rounded text-amber-300">src/</code> ขึ้น GitHub → Render auto-deploy</li>
+                  <li>รอ deploy เสร็จ → เข้า Admin Dashboard อีกครั้ง</li>
+                  <li>กด <span className="text-amber-300 font-semibold">Import</span> → เลือกไฟล์ที่บันทึกไว้ → ข้อมูลกลับมาครบ ✅</li>
+                </ol>
+              </div>
             </div>
           )}
 

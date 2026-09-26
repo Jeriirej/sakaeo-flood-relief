@@ -12,7 +12,9 @@ import {
   Filter,
   ExternalLink,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  ShieldAlert,
+  ArrowRight
 } from 'lucide-react';
 import { getGoogleMapsDirectionsUrl, getGoogleMapsViewUrl, formatThaiDateTime } from '../utils/geo';
 
@@ -66,6 +68,173 @@ export default function RoadList({
           <span className="px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-medium">
             🟢 ทางเลี่ยงปลอดภัย
           </span>
+        </div>
+      </div>
+
+      {/* Official Police Travel Advisory Section (ประชาสัมพันธ์เส้นทางเข้าสู่จังหวัดสระแก้ว) */}
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-900/60 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-indigo-400 shrink-0">
+              <Navigation className="w-5 h-5 text-indigo-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  ประกาศด่วน
+                </span>
+                <h3 className="font-heading font-black text-lg sm:text-xl text-white">
+                  เส้นทางเข้าสู่จังหวัดสระแก้ว
+                </h3>
+              </div>
+              <p className="text-xs text-indigo-200 mt-0.5">
+                โปรดตรวจสอบเส้นทางก่อนออกเดินทาง และขับขี่ด้วยความระมัดระวัง • ตำรวจภูธรจังหวัดสระแก้ว ห่วงใยประชาชน
+              </p>
+            </div>
+          </div>
+          <a
+            href="tel:191"
+            className="self-start sm:self-center px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg transition-transform active:scale-95 shrink-0"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>สอบถามเส้นทาง / แจ้งเหตุ โทร. 191</span>
+          </a>
+        </div>
+
+        {/* 2 Routes Cards Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          
+          {/* Route 1: กรุงเทพฯ -> สระแก้ว */}
+          <div className="bg-slate-950/80 border border-red-500/40 rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 shadow-lg">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-red-500/20 text-red-400">
+                    <Car className="w-4 h-4" />
+                  </div>
+                  <span className="font-heading font-bold text-sm sm:text-base text-white">
+                    กรุงเทพฯ ➔ สระแก้ว
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  แนะนำเส้นทางเลี่ยง
+                </span>
+              </div>
+
+              {/* Danger Warning Pill */}
+              <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-500/50 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-bold text-red-300">หลีกเลี่ยงเด็ดขาด: </span>
+                  <span className="text-red-200">สะพานข้ามคลองหันแดง (ทล.33 น้ำท่วมสูง ห้ามรถทุกชนิดผ่าน)</span>
+                </div>
+              </div>
+
+              {/* Step by Step Guide */}
+              <div className="space-y-1.5 text-xs text-slate-300">
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600/60 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <span>ใช้ทางหลวงหมายเลข 33 มุ่งหน้าจังหวัดปราจีนบุรี</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600/60 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <span>ถึงแยกกบินทร์บุรี มุ่งหน้าแยกหนองสังข์</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600/60 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <span>เลี้ยวซ้ายบริเวณข้างร้านสะดวกซื้อ 7-Eleven</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600/60 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                  <span>ใช้เส้นทางหลวงชนบท <strong className="text-emerald-300">สท.3015 ➔ สท.3039 ➔ สท.4034</strong></span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600/60 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                  <span>เดินทางเข้าสู่ สภ.เมืองสระแก้ว โดยปลอดภัย</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+              <button
+                onClick={() => onFocusOnMap && onFocusOnMap({ lat: 13.7745, lng: 101.9632 })}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-red-950/50 hover:bg-red-900/60 border border-red-700/50 text-red-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5 text-red-400" />
+                <span>ดูจุดสะพานคลองหันแดง</span>
+              </button>
+              <button
+                onClick={() => onFocusOnMap && onFocusOnMap({ lat: 13.8450, lng: 102.0150 })}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-700/50 text-indigo-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Navigation className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ดูเส้นทางเลี่ยง</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Route 2: จันทบุรี -> สระแก้ว */}
+          <div className="bg-slate-950/80 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 shadow-lg">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <Car className="w-4 h-4" />
+                  </div>
+                  <span className="font-heading font-bold text-sm sm:text-base text-white">
+                    จันทบุรี ➔ สระแก้ว
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  สัญจรได้ตามปกติ
+                </span>
+              </div>
+
+              {/* Status Banner */}
+              <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/50 flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-bold text-emerald-300">รถยนต์ขนาดเล็กเดินทางได้ตามปกติ: </span>
+                  <span className="text-emerald-200">เส้นทางสัญจรปลอดภัย แต่ขอให้เพิ่มความระมัดระวัง</span>
+                </div>
+              </div>
+
+              {/* Waypoints */}
+              <div className="space-y-2 text-xs text-slate-300">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>ใช้ <strong>ทางหลวงหมายเลข 317</strong> มุ่งหน้าสระแก้ว</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>ผ่าน <strong>อำเภอสอยดาว</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>ผ่าน <strong>อำเภอวังน้ำเย็น</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>ผ่าน <strong>อำเภอเขาฉกรรจ์</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ArrowRight className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span className="text-cyan-300 font-semibold">เดินทางเข้าสู่จังหวัดสระแก้วโดยสวัสดิภาพ</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800/80">
+              <button
+                onClick={() => onFocusOnMap && onFocusOnMap({ lat: 13.5850, lng: 102.1200 })}
+                className="w-full py-1.5 px-3 rounded-xl bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                <span>ดูแนวเส้นทาง ทล.317 บนแผนที่</span>
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
 
