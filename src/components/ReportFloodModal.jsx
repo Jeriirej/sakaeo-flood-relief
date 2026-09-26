@@ -51,7 +51,8 @@ export default function ReportFloodModal({
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // เมื่อ modal เปิดพร้อมพิกัดที่ระบุมาจากช่องค้นหา ให้ pre-fill ค่า lat/lng อัตโนมัติ
+  // เมื่อ modal เปิดพร้อมพิกัดที่ส่งมา (ทั้งจากช่องค้นหา และจากการจิ้มแผนที่)
+  // ให้ pre-fill ค่า lat/lng อัตโนมัติ
   useEffect(() => {
     if (isOpen && initialCoords) {
       setFormData(prev => ({
@@ -60,14 +61,9 @@ export default function ReportFloodModal({
         lng: Number(initialCoords.lng).toFixed(6)
       }));
     }
-    // ถ้าเปิด modal ใหม่โดยไม่มี initialCoords ให้ reset lat/lng
-    if (isOpen && !initialCoords) {
-      setFormData(prev => ({ ...prev, lat: '', lng: '' }));
-    }
   }, [isOpen, initialCoords]);
 
   if (!isOpen) return null;
-
 
   const handleAutoGPS = async () => {
     setLocating(true);

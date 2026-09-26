@@ -219,13 +219,23 @@ export default function App() {
     setActiveTab('map');
     
     setLocationPickerCallback(() => (coords) => {
-      callback(coords);
       setIsSelectingLocation(false);
       setTempPickerCoord(coords);
       // Re-open the corresponding modal
-      if (modalType === 'sos') setIsSosModalOpen(true);
-      if (modalType === 'report') setIsReportModalOpen(true);
-      if (modalType === 'donation') setIsDonationModalOpen(true);
+      if (modalType === 'sos') {
+        callback(coords); // SOS modal ใช้ callback ปกติ
+        setIsSosModalOpen(true);
+      }
+      if (modalType === 'report') {
+        // Report modal: ใช้ reportInitialCoords แทน callback
+        // เพราะ modal ถูก unmount ไปแล้ว callback จาก modal จะไม่ทำงาน
+        setReportInitialCoords(coords);
+        setIsReportModalOpen(true);
+      }
+      if (modalType === 'donation') {
+        callback(coords); // Donation modal ใช้ callback ปกติ
+        setIsDonationModalOpen(true);
+      }
     });
   };
 
