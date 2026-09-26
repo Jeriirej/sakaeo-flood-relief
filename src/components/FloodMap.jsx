@@ -104,6 +104,7 @@ export default function FloodMap({
   selectedTempCoord = null,
   onNavigateToSos,
   onOpenReportModal,
+  onOpenReportModalWithCoords,
   onOpenSosModal,
   onOpenUpdateModal,
   onOpenDonationModal,
@@ -137,6 +138,24 @@ export default function FloodMap({
   // Map Search State & Landmarks
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [parsedCoord, setParsedCoord] = useState(null); // พิกัดที่ parse ได้จากช่องค้นหา
+
+  // ฟังก์ชันตรวจจับและ parse พิกัด lat,lng จากข้อความ
+  const parseCoordinate = (text) => {
+    const trimmed = text.trim();
+    // รองรับรูปแบบ: "13.6872, 102.5085" หรือ "13.6872,102.5085" หรือ "13.6872 102.5085"
+    const coordRegex = /^(-?\d{1,3}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)$/;
+    const match = trimmed.match(coordRegex);
+    if (match) {
+      const lat = parseFloat(match[1]);
+      const lng = parseFloat(match[2]);
+      // ตรวจสอบว่าอยู่ในช่วงพิกัดประเทศไทย (lat: 5-21, lng: 97-106)
+      if (lat >= 5 && lat <= 21 && lng >= 97 && lng <= 106) {
+        return { lat, lng };
+      }
+    }
+    return null;
+  };
 
   const SAKAEO_LANDMARKS = [
     { name: 'บ้านทับใหม่ (ต.โนนหมากเค็ง)', district: 'วัฒนานคร', lat: 13.7845, lng: 102.3210, category: 'ชุมชนที่น้ำท่วม' },
@@ -156,19 +175,44 @@ export default function FloodMap({
     { name: 'เขาฉกรรจ์', district: 'เขาฉกรรจ์', lat: 13.6580, lng: 102.0290, category: 'จุดชมวิว/จุดสูง' }
   ];
 
-  const searchResults = searchQuery.trim() ? [
-    ...SAKAEO_LANDMARKS.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()) || l.district.includes(searchQuery)),
-    ...floods.filter(f => f.title?.toLowerCase().includes(searchQuery.toLowerCase()) || f.district?.includes(searchQuery)).map(f => ({ name: f.title, district: f.district, lat: f.lat, lng: f.lng, category: 'จุดน้ำท่วม/ทางเลี่ยง' })),
-    ...donations.filter(d => d.title?.toLowerCase().includes(searchQuery.toLowerCase()) || d.district?.includes(searchQuery)).map(d => ({ name: d.title, district: d.district, lat: d.lat, lng: d.lng, category: 'จุดแจก/บริจาค' })),
-    ...rescueCenters.filter(r => r.name?.toLowerCase().includes(searchQuery.toLowerCase()) || r.district?.includes(searchQuery)).map(r => ({ name: r.name, district: r.district, lat: r.lat, lng: r.lng, category: 'ศูนย์กู้ภัย' })),
-    ...shelters.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.district?.includes(searchQuery)).map(s => ({ name: s.name, district: s.district, lat: s.lat, lng: s.lng, category: 'ศูนย์พักพิง' }))
-  ].slice(0, 6) : [];
+  const searchResults = (() => {
+    if (!searchQuery.trim()) return [];
+    // ตรวจจับพิกัด — ถ้า parse ได้ให้แสดง item พิเศษด้านบนก่อน
+    const coord = parseCoordinate(searchQuery);
+    const coordItem = coord ? [{
+      name: `📍 ไปยังพิกัด: ${coord.lat.toFixed(5)}, ${coord.lng.toFixed(5)}`,
+      district: 'กรอกข้อมูลน้ำท่วมที่จุดนี้ได้เลย',
+      lat: coord.lat,
+      lng: coord.lng,
+      category: 'พิกัด',
+      isCoordItem: true,
+      coordData: coord
+    }] : [];
+    const normalResults = [
+      ...SAKAEO_LANDMARKS.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()) || l.district.includes(searchQuery)),
+      ...floods.filter(f => f.title?.toLowerCase().includes(searchQuery.toLowerCase()) || f.district?.includes(searchQuery)).map(f => ({ name: f.title, district: f.district, lat: f.lat, lng: f.lng, category: 'จุดน้ำท่วม/ทางเลี่ยง' })),
+      ...donations.filter(d => d.title?.toLowerCase().includes(searchQuery.toLowerCase()) || d.district?.includes(searchQuery)).map(d => ({ name: d.title, district: d.district, lat: d.lat, lng: d.lng, category: 'จุดแจก/บริจาค' })),
+      ...rescueCenters.filter(r => r.name?.toLowerCase().includes(searchQuery.toLowerCase()) || r.district?.includes(searchQuery)).map(r => ({ name: r.name, district: r.district, lat: r.lat, lng: r.lng, category: 'ศูนย์กู้ภัย' })),
+      ...shelters.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.district?.includes(searchQuery)).map(s => ({ name: s.name, district: s.district, lat: s.lat, lng: s.lng, category: 'ศูนย์พักพิง' }))
+    ];
+    return [...coordItem, ...normalResults].slice(0, 7);
+  })();
 
   const handleSelectSearchResult = (target) => {
     setMapCenter([target.lat, target.lng]);
-    setMapZoom(14);
-    setSearchQuery(target.name);
+    setMapZoom(16);
     setShowSearchDropdown(false);
+
+    // กรณีเป็น coordinate item พิเศษ — ซูมไปพิกัด + เปิด ReportFloodModal พร้อมพิกัด
+    if (target.isCoordItem && target.coordData) {
+      setSearchQuery(`${target.coordData.lat.toFixed(5)}, ${target.coordData.lng.toFixed(5)}`);
+      if (onOpenReportModalWithCoords) {
+        onOpenReportModalWithCoords({ lat: target.coordData.lat, lng: target.coordData.lng });
+      }
+      return;
+    }
+
+    setSearchQuery(target.name);
 
     if (isMobile) {
       const floodMatch = floods.find(f => f.title === target.name);
@@ -207,6 +251,9 @@ export default function FloodMap({
     setSearchQuery(val);
     setShowSearchDropdown(true);
 
+    // อัพเดต parsedCoord เพื่อให้ searchResults ใช้งานได้ทันที
+    setParsedCoord(parseCoordinate(val));
+
     const trimmed = val.trim();
     if (trimmed.length === 48) {
       try {
@@ -219,6 +266,7 @@ export default function FloodMap({
         if (res.ok && data.valid) {
           setSearchQuery('');
           setShowSearchDropdown(false);
+          setParsedCoord(null);
           if (onTriggerAdminLogin) {
             onTriggerAdminLogin();
           }
@@ -296,7 +344,7 @@ export default function FloodMap({
               value={searchQuery}
               onChange={e => handleSearchInputChange(e.target.value)}
               onFocus={() => setShowSearchDropdown(true)}
-              placeholder="🔍 ค้นหาบนแผนที่ (เช่น ทับใหม่, ตลาดอรัญ, โรงครัว, รพ.)..."
+              placeholder="🔍 ค้นหา หรือวางพิกัด เช่น 13.6872, 102.5085 ..."
               className="w-full bg-transparent text-xs text-white placeholder-slate-400 focus:outline-none"
             />
             {searchQuery && (
@@ -305,6 +353,7 @@ export default function FloodMap({
                 onClick={() => {
                   setSearchQuery('');
                   setShowSearchDropdown(false);
+                  setParsedCoord(null);
                 }}
                 className="text-slate-400 hover:text-white p-0.5"
               >
@@ -320,17 +369,31 @@ export default function FloodMap({
                 <div
                   key={idx}
                   onClick={() => handleSelectSearchResult(res)}
-                  className="px-3 py-2 hover:bg-slate-800 cursor-pointer border-b border-slate-800/60 last:border-0 flex items-center justify-between gap-2"
+                  className={`px-3 py-2 cursor-pointer border-b border-slate-800/60 last:border-0 flex items-center justify-between gap-2 ${
+                    res.isCoordItem
+                      ? 'bg-emerald-900/40 hover:bg-emerald-800/60 border-b border-emerald-700/40'
+                      : 'hover:bg-slate-800'
+                  }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-white truncate">{res.name}</div>
+                    <div className={`text-xs font-bold truncate ${res.isCoordItem ? 'text-emerald-300' : 'text-white'}`}>{res.name}</div>
                     <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                      <span>อ.{res.district}</span>
-                      <span>•</span>
-                      <span className="text-cyan-400 font-medium">{res.category}</span>
+                      {res.isCoordItem ? (
+                        <span className="text-emerald-400 font-medium">📝 {res.district}</span>
+                      ) : (
+                        <>
+                          <span>อ.{res.district}</span>
+                          <span>•</span>
+                          <span className="text-cyan-400 font-medium">{res.category}</span>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <Navigation className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  {res.isCoordItem ? (
+                    <span className="text-emerald-400 text-xs shrink-0">+ แจ้ง</span>
+                  ) : (
+                    <Navigation className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  )}
                 </div>
               ))}
             </div>

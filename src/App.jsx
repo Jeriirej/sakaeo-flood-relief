@@ -122,6 +122,7 @@ export default function App() {
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [selectedFloodToUpdate, setSelectedFloodToUpdate] = useState(null);
+  const [reportInitialCoords, setReportInitialCoords] = useState(null); // พิกัดที่จะ pre-fill ใน ReportFloodModal
 
   // Map coordinate picking mode
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
@@ -201,6 +202,12 @@ export default function App() {
     const interval = setInterval(fetchData, 20000);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  // เปิด ReportFloodModal พร้อมพิกัดที่ตั้งค่าล่วงหน้า (ถูกเรียกจาก FloodMap เมื่อผู้ใช้วางพิกัดในช่องค้นหา)
+  const handleOpenReportModalWithCoords = (coords) => {
+    setReportInitialCoords(coords);
+    setIsReportModalOpen(true);
+  };
 
   // Handle Pick Location from Map (used by SOS, Report, and Donation modals)
   const handleStartPickLocation = (callback, modalType) => {
@@ -407,6 +414,7 @@ export default function App() {
             isSelectingLocation={isSelectingLocation}
             selectedTempCoord={tempPickerCoord}
             onOpenReportModal={() => setIsReportModalOpen(true)}
+            onOpenReportModalWithCoords={handleOpenReportModalWithCoords}
             onOpenSosModal={() => setIsSosModalOpen(true)}
             onOpenUpdateModal={(flood) => setSelectedFloodToUpdate(flood)}
             onOpenDonationModal={() => setIsDonationModalOpen(true)}
@@ -529,12 +537,14 @@ export default function App() {
       {/* Report Flood / Detour Modal */}
       <ReportFloodModal
         isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
+        onClose={() => { setIsReportModalOpen(false); setReportInitialCoords(null); }}
         onSubmitSuccess={(newFlood) => {
           setFloods(prev => [newFlood, ...prev]);
           setActiveTab('map');
+          setReportInitialCoords(null);
         }}
         onPickLocationFromMap={(callback) => handleStartPickLocation(callback, 'report')}
+        initialCoords={reportInitialCoords}
       />
 
       {/* Update Flood Status Modal (Live Crowd Updates) */}
