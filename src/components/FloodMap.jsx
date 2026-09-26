@@ -122,6 +122,18 @@ export default function FloodMap({
   const [locating, setLocating] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
 
+  // Mobile Separate Detail Popup Modal State
+  const [mobileDetailItem, setMobileDetailItem] = useState(null);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Map Search State & Landmarks
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -157,6 +169,29 @@ export default function FloodMap({
     setMapZoom(14);
     setSearchQuery(target.name);
     setShowSearchDropdown(false);
+
+    if (isMobile) {
+      const floodMatch = floods.find(f => f.title === target.name);
+      if (floodMatch) {
+        setMobileDetailItem({ type: 'flood', data: floodMatch });
+        return;
+      }
+      const donationMatch = donations.find(d => d.title === target.name);
+      if (donationMatch) {
+        setMobileDetailItem({ type: 'donation', data: donationMatch });
+        return;
+      }
+      const rescueMatch = rescueCenters.find(r => r.name === target.name);
+      if (rescueMatch) {
+        setMobileDetailItem({ type: 'rescueCenter', data: rescueMatch });
+        return;
+      }
+      const shelterMatch = shelters.find(s => s.name === target.name);
+      if (shelterMatch) {
+        setMobileDetailItem({ type: 'shelter', data: shelterMatch });
+        return;
+      }
+    }
   };
 
   const handleCopy = async (id, text) => {
@@ -552,47 +587,56 @@ export default function FloodMap({
           <Marker 
             position={myLocation}
             icon={createCustomMarkerIcon('picker')}
+            eventHandlers={{
+              click: () => {
+                if (isMobile) {
+                  setMobileDetailItem({ type: 'myLocation', data: { lat: myLocation[0], lng: myLocation[1] } });
+                }
+              }
+            }}
           >
-            <Popup maxWidth={280}>
-              <div className="p-1.5 text-slate-900">
-                <p className="font-heading font-bold text-sm text-slate-900 flex items-center gap-1">
-                  <span>📍 ตำแหน่งปัจจุบันของคุณ (GPS)</span>
-                </p>
-                <p className="text-xs text-slate-600 mt-1 font-mono bg-slate-100 p-1.5 rounded-lg">
-                  พิกัด: {myLocation[0].toFixed(5)}, {myLocation[1].toFixed(5)}
-                </p>
+            {!isMobile && (
+              <Popup maxWidth={280}>
+                <div className="p-1.5 text-slate-900">
+                  <p className="font-heading font-bold text-sm text-slate-900 flex items-center gap-1">
+                    <span>📍 ตำแหน่งปัจจุบันของคุณ (GPS)</span>
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1 font-mono bg-slate-100 p-1.5 rounded-lg">
+                    พิกัด: {myLocation[0].toFixed(5)}, {myLocation[1].toFixed(5)}
+                  </p>
 
-                <div className="mt-2.5 space-y-1.5 pt-2 border-t border-slate-200">
-                  <a
-                    href={getLineShareUrl(formatMyLocationShareText(myLocation[0], myLocation[1]))}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center gap-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-1.5 px-2.5 rounded-xl text-xs no-underline shadow-sm"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>แชร์พิกัดของฉันเข้า LINE 📲</span>
-                  </a>
+                  <div className="mt-2.5 space-y-1.5 pt-2 border-t border-slate-200">
+                    <a
+                      href={getLineShareUrl(formatMyLocationShareText(myLocation[0], myLocation[1]))}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center gap-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-1.5 px-2.5 rounded-xl text-xs no-underline shadow-sm"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>แชร์พิกัดของฉันเข้า LINE 📲</span>
+                    </a>
 
-                  <button
-                    type="button"
-                    onClick={() => handleCopy('my-loc', formatMyLocationShareText(myLocation[0], myLocation[1]))}
-                    className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-1.5 px-2.5 rounded-xl text-xs border border-slate-300"
-                  >
-                    {copiedId === 'my-loc' ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="text-emerald-700 font-bold">คัดลอกพิกัดแล้ว!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-slate-500" />
-                        <span>คัดลอกพิกัด & ลิงก์แผนที่</span>
-                      </>
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy('my-loc', formatMyLocationShareText(myLocation[0], myLocation[1]))}
+                      className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-1.5 px-2.5 rounded-xl text-xs border border-slate-300"
+                    >
+                      {copiedId === 'my-loc' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700 font-bold">คัดลอกพิกัดแล้ว!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-slate-500" />
+                          <span>คัดลอกพิกัด & ลิงก์แผนที่</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </Popup>
+              </Popup>
+            )}
           </Marker>
         )}
 
@@ -601,25 +645,34 @@ export default function FloodMap({
           <Marker
             position={[selectedTempCoord.lat, selectedTempCoord.lng]}
             icon={createCustomMarkerIcon('picker')}
+            eventHandlers={{
+              click: () => {
+                if (isMobile) {
+                  setMobileDetailItem({ type: 'temp', data: selectedTempCoord });
+                }
+              }
+            }}
           >
-            <Popup>
-              <div className="p-1 text-slate-900 space-y-2 min-w-[180px]">
-                <p className="font-bold text-sm text-blue-600 flex items-center gap-1">
-                  <span>🎯 จุดที่คุณเลือก</span>
-                </p>
-                <p className="text-xs text-slate-600 font-mono bg-slate-100 p-1.5 rounded">
-                  พิกัด: {selectedTempCoord.lat.toFixed(5)}, {selectedTempCoord.lng.toFixed(5)}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onClearSelectedCoord && onClearSelectedCoord()}
-                  className="w-full flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1.5 px-2.5 rounded-lg border border-rose-300 transition-colors shadow-sm text-xs"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  <span>ลบ/ยกเลิกจุดที่เลือกนี้</span>
-                </button>
-              </div>
-            </Popup>
+            {!isMobile && (
+              <Popup>
+                <div className="p-1 text-slate-900 space-y-2 min-w-[180px]">
+                  <p className="font-bold text-sm text-blue-600 flex items-center gap-1">
+                    <span>🎯 จุดที่คุณเลือก</span>
+                  </p>
+                  <p className="text-xs text-slate-600 font-mono bg-slate-100 p-1.5 rounded">
+                    พิกัด: {selectedTempCoord.lat.toFixed(5)}, {selectedTempCoord.lng.toFixed(5)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onClearSelectedCoord && onClearSelectedCoord()}
+                    className="w-full flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1.5 px-2.5 rounded-lg border border-rose-300 transition-colors shadow-sm text-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>ลบ/ยกเลิกจุดที่เลือกนี้</span>
+                  </button>
+                </div>
+              </Popup>
+            )}
           </Marker>
         )}
 
@@ -665,8 +718,16 @@ export default function FloodMap({
             key={item.id}
             position={[item.lat, item.lng]}
             icon={createCustomMarkerIcon(item.severity)}
+            eventHandlers={{
+              click: () => {
+                if (isMobile) {
+                  setMobileDetailItem({ type: 'flood', data: item });
+                }
+              }
+            }}
           >
-            <Popup className="custom-popup" maxWidth={320}>
+            {!isMobile && (
+              <Popup className="custom-popup" maxWidth={320}>
               <div className="p-1 text-slate-900 text-sm">
                 
                 {/* Sample data alert notice */}
@@ -828,6 +889,7 @@ export default function FloodMap({
 
               </div>
             </Popup>
+            )}
           </Marker>
         ))}
 
@@ -838,9 +900,16 @@ export default function FloodMap({
             position={[item.lat, item.lng]}
             icon={createCustomMarkerIcon('sos')}
             zIndexOffset={3000}
+            eventHandlers={{
+              click: () => {
+                if (isMobile) {
+                  setMobileDetailItem({ type: 'sos', data: item });
+                }
+              }
+            }}
           >
             {/* ป้ายข้อมูลโชว์ขึ้นมาเลยโดยไม่ต้องกด (ปิดได้สำหรับคนอยากดูเฉพาะทาง) */}
-            {showSosDetails && (
+            {showSosDetails && !isMobile && (
               <Tooltip 
                 permanent 
                 direction="top" 
@@ -878,7 +947,8 @@ export default function FloodMap({
               </Tooltip>
             )}
 
-            <Popup className="custom-popup" maxWidth={330}>
+            {!isMobile && (
+              <Popup className="custom-popup" maxWidth={330}>
               <div className="p-1 text-slate-900 text-sm">
                 
                 {/* SOS Header */}
@@ -992,6 +1062,7 @@ export default function FloodMap({
 
               </div>
             </Popup>
+            )}
           </Marker>
         ))}
 
@@ -1002,23 +1073,32 @@ export default function FloodMap({
             position={[rc.lat, rc.lng]}
             icon={createCustomMarkerIcon('rescueCenter')}
             zIndexOffset={2500}
+            eventHandlers={{
+              click: () => {
+                if (isMobile) {
+                  setMobileDetailItem({ type: 'rescueCenter', data: rc });
+                }
+              }
+            }}
           >
-            <Tooltip
-              direction="top"
-              offset={[0, -42]}
-              opacity={0.95}
-              className="custom-map-tooltip"
-            >
-              <div className="text-[11px] font-sans">
-                <div className="font-bold text-sky-400 flex items-center gap-1">
-                  <span>🛡️ ฐานกู้ภัย 24 ชม.</span>
-                </div>
-                <div className="text-white font-semibold truncate max-w-[210px]">{rc.name}</div>
-                <div className="text-amber-300 font-mono">📞 {rc.phone} (กดโทรขอเรือ/ทีมช่วย)</div>
-              </div>
-            </Tooltip>
+            {!isMobile && (
+              <>
+                <Tooltip
+                  direction="top"
+                  offset={[0, -42]}
+                  opacity={0.95}
+                  className="custom-map-tooltip"
+                >
+                  <div className="text-[11px] font-sans">
+                    <div className="font-bold text-sky-400 flex items-center gap-1">
+                      <span>🛡️ ฐานกู้ภัย 24 ชม.</span>
+                    </div>
+                    <div className="text-white font-semibold truncate max-w-[210px]">{rc.name}</div>
+                    <div className="text-amber-300 font-mono">📞 {rc.phone} (กดโทรขอเรือ/ทีมช่วย)</div>
+                  </div>
+                </Tooltip>
 
-            <Popup className="custom-popup" maxWidth={340}>
+                <Popup className="custom-popup" maxWidth={340}>
               <div className="p-1 text-slate-900 text-sm">
                 
                 {/* Header */}
@@ -1120,6 +1200,8 @@ export default function FloodMap({
 
               </div>
             </Popup>
+            </>
+            )}
           </Marker>
         ))}
 
@@ -1129,8 +1211,16 @@ export default function FloodMap({
             key={s.id}
             position={[s.lat, s.lng]}
             icon={createCustomMarkerIcon('shelter')}
+            eventHandlers={{
+              click: () => {
+                if (isMobile) {
+                  setMobileDetailItem({ type: 'shelter', data: s });
+                }
+              }
+            }}
           >
-            <Popup className="custom-popup" maxWidth={320}>
+            {!isMobile && (
+              <Popup className="custom-popup" maxWidth={320}>
               <div className="p-1 text-slate-900 text-sm">
                 
                 <div className="flex items-center justify-between gap-2 border-b border-sky-200 pb-2 mb-2">
@@ -1200,6 +1290,7 @@ export default function FloodMap({
 
               </div>
             </Popup>
+            )}
           </Marker>
         ))}
 
@@ -1210,23 +1301,32 @@ export default function FloodMap({
             position={[d.lat, d.lng]}
             icon={createCustomMarkerIcon('donation')}
             zIndexOffset={2200}
+            eventHandlers={{
+              click: () => {
+                if (isMobile) {
+                  setMobileDetailItem({ type: 'donation', data: d });
+                }
+              }
+            }}
           >
-            <Tooltip
-              direction="top"
-              offset={[0, -40]}
-              opacity={0.95}
-              className="custom-map-tooltip"
-            >
-              <div className="text-[11px] font-sans">
-                <div className="font-bold text-amber-400 flex items-center gap-1">
-                  <span>🍲 {d.type === 'food_distribution' ? 'โรงครัว/แจกอาหาร' : d.type === 'relief_supplies' ? 'แจกถุงยังชีพ' : 'จุดรับบริจาค'}</span>
-                </div>
-                <div className="text-white font-semibold truncate max-w-[210px]">{d.title}</div>
-                <div className="text-yellow-300 font-mono">📞 {d.contactPhone} (โทรเช็กก่อนเดินทาง)</div>
-              </div>
-            </Tooltip>
+            {!isMobile && (
+              <>
+                <Tooltip
+                  direction="top"
+                  offset={[0, -40]}
+                  opacity={0.95}
+                  className="custom-map-tooltip"
+                >
+                  <div className="text-[11px] font-sans">
+                    <div className="font-bold text-amber-400 flex items-center gap-1">
+                      <span>🍲 {d.type === 'food_distribution' ? 'โรงครัว/แจกอาหาร' : d.type === 'relief_supplies' ? 'แจกถุงยังชีพ' : 'จุดรับบริจาค'}</span>
+                    </div>
+                    <div className="text-white font-semibold truncate max-w-[210px]">{d.title}</div>
+                    <div className="text-yellow-300 font-mono">📞 {d.contactPhone} (โทรเช็กก่อนเดินทาง)</div>
+                  </div>
+                </Tooltip>
 
-            <Popup className="custom-popup" maxWidth={340}>
+                <Popup className="custom-popup" maxWidth={340}>
               <div className="p-1 text-slate-900 text-sm">
                 
                 {/* Header */}
@@ -1335,6 +1435,8 @@ export default function FloodMap({
 
               </div>
             </Popup>
+            </>
+            )}
           </Marker>
         ))}
 
@@ -1406,6 +1508,603 @@ export default function FloodMap({
                 <Navigation className="w-3.5 h-3.5 text-white" />
                 <span>กู้ภัยนำทาง 🧭</span>
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📱 Mobile Separate Detail Popup Modal (ป๊อปอัปแยกสำหรับมือถือ ไม่ทับซ้อนแผนที่) */}
+      {mobileDetailItem && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+          onClick={() => setMobileDetailItem(null)}
+        >
+          <div 
+            className="w-full max-h-[85vh] sm:max-w-lg bg-slate-900 border-t sm:border border-slate-700/80 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-in slide-in-from-bottom-5 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Drag Pill on mobile */}
+            <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2 shrink-0 sm:hidden" />
+
+            {/* Header with Title and Close button */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                {mobileDetailItem.type === 'flood' && (
+                  <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
+                    mobileDetailItem.data.severity === 'danger'
+                      ? 'bg-rose-950 text-rose-300 border border-rose-600/50'
+                      : mobileDetailItem.data.severity === 'warning'
+                      ? 'bg-amber-950 text-amber-300 border border-amber-600/50'
+                      : 'bg-emerald-950 text-emerald-300 border border-emerald-600/50'
+                  }`}>
+                    {mobileDetailItem.data.severity === 'danger' ? '🔴 ทางขาด / ห้ามผ่าน' : mobileDetailItem.data.severity === 'warning' ? '🟡 เฝ้าระวัง / รถเล็กเลี่ยง' : '🟢 เส้นทางเลี่ยงสัญจรได้'}
+                  </span>
+                )}
+                {mobileDetailItem.type === 'sos' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-rose-600 text-white flex items-center gap-1 animate-pulse">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>ขอความช่วยเหลือฉุกเฉิน (SOS)</span>
+                  </span>
+                )}
+                {mobileDetailItem.type === 'donation' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-orange-600 text-white flex items-center gap-1">
+                    <Utensils className="w-3.5 h-3.5" />
+                    <span>{mobileDetailItem.data.type === 'food_distribution' ? 'โรงครัวแจกอาหารสด' : mobileDetailItem.data.type === 'relief_supplies' ? 'จุดแจกถุงยังชีพ' : 'จุดรับบริจาค'}</span>
+                  </span>
+                )}
+                {mobileDetailItem.type === 'rescueCenter' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-blue-600 text-white flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-300" />
+                    <span>ศูนย์กู้ภัย & ฐานช่วยเหลือ 24 ชม.</span>
+                  </span>
+                )}
+                {mobileDetailItem.type === 'shelter' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-sky-600 text-white flex items-center gap-1">
+                    <Home className="w-3.5 h-3.5" />
+                    <span>ศูนย์พักพิงชั่วคราว</span>
+                  </span>
+                )}
+                {mobileDetailItem.type === 'myLocation' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-cyan-600 text-white flex items-center gap-1">
+                    <span>📍 พิกัดของคุณ</span>
+                  </span>
+                )}
+                {mobileDetailItem.type === 'temp' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-blue-600 text-white flex items-center gap-1">
+                    <span>🎯 จุดที่คุณเลือก</span>
+                  </span>
+                )}
+              </div>
+
+              <button
+                onClick={() => setMobileDetailItem(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors shrink-0"
+                aria-label="ปิด"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Modal Content */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-8 text-sm">
+              
+              {/* 1. FLOOD DETAIL */}
+              {mobileDetailItem.type === 'flood' && (() => {
+                const item = mobileDetailItem.data;
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-heading font-bold text-lg text-white leading-snug">
+                        {item.title}
+                      </h3>
+                      <div className="flex items-center justify-between text-xs text-slate-400 mt-1">
+                        <span>📍 อ.{item.district} {item.subdistrict ? `ต.${item.subdistrict}` : ''}</span>
+                        <span className="text-[11px] text-cyan-300 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded">
+                          รัศมี ~{item.radius || 400} ม.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Water level & passable info */}
+                    <div className="bg-slate-800/80 border border-slate-700/80 p-3 rounded-2xl space-y-1.5 text-xs">
+                      <div className="flex items-start gap-2">
+                        <span className="font-semibold text-slate-400 shrink-0">ระดับน้ำ:</span>
+                        <span className="font-bold text-rose-400 text-sm">{item.waterLevel}</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Car className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <span className="text-slate-200">{item.passableFor}</span>
+                      </div>
+                    </div>
+
+                    {/* Recommended Bypass Route */}
+                    {item.recommendedRoute && (
+                      <div className="bg-emerald-950/70 border border-emerald-500/50 p-3 rounded-2xl text-xs space-y-1">
+                        <p className="font-bold text-emerald-300 flex items-center gap-1.5 text-sm">
+                          <Navigation className="w-4 h-4 text-emerald-400" /> เส้นทางเลี่ยงที่แนะนำ:
+                        </p>
+                        <p className="text-emerald-100 leading-relaxed">
+                          {item.recommendedRoute}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {item.description && (
+                      <div className="bg-slate-800/50 border border-slate-700/50 p-2.5 rounded-xl text-xs text-slate-300">
+                        {item.description}
+                      </div>
+                    )}
+
+                    {/* Update History */}
+                    {item.updateHistory && item.updateHistory.length > 0 && (
+                      <div className="bg-amber-950/60 border border-amber-500/40 p-2.5 rounded-xl text-xs text-amber-200">
+                        <div className="font-bold text-amber-300">🔔 อัปเดตล่าสุด:</div>
+                        <p className="mt-0.5">{item.updateHistory[0].note}</p>
+                        <span className="text-[10px] text-amber-400/80">
+                          ({formatThaiDateTime(item.updateHistory[0].timestamp)} โดย {item.updateHistory[0].reporterName})
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => { setMobileDetailItem(null); onOpenUpdateModal && onOpenUpdateModal(item); }}
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold py-2.5 px-3 rounded-xl shadow text-xs active:scale-95"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        <span>📢 อัปเดตสถานการณ์จุดนี้ (น้ำลด / น้ำเพิ่ม)</span>
+                      </button>
+
+                      <a
+                        href={getGoogleMapsDirectionsUrl(item.lat, item.lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-[#1a73e8] hover:bg-[#1557b0] text-white font-bold py-2.5 px-3 rounded-xl shadow-md text-xs no-underline active:scale-95"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span>เปิดแอป Google Maps นำทางไปจุดนี้ 🧭</span>
+                      </a>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <a
+                          href={getLineShareUrl(formatFloodShareText(item))}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-2 px-2 rounded-xl text-xs no-underline"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span>แชร์เข้า LINE</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(item.id, formatFloodShareText(item))}
+                          className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2 px-2 rounded-xl text-xs border border-slate-700"
+                        >
+                          {copiedId === item.id ? (
+                            <>
+                              <Check className="w-4 h-4 text-emerald-400" />
+                              <span className="text-emerald-400 font-bold">คัดลอกแล้ว!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4 text-slate-400" />
+                              <span>คัดลอกข้อความ</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {item.contactPhone && (
+                        <a
+                          href={`tel:${item.contactPhone}`}
+                          className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold py-2 px-3 rounded-xl text-xs border border-slate-700 no-underline"
+                        >
+                          <Phone className="w-4 h-4" />
+                          <span>โทรสอบถามข้อมูล: {item.contactPhone}</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 2. SOS DETAIL */}
+              {mobileDetailItem.type === 'sos' && (() => {
+                const item = mobileDetailItem.data;
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-heading font-bold text-lg text-white leading-snug">
+                        {item.name}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        เวลาที่แจ้ง: {formatThaiDateTime(item.createdAt)}
+                      </p>
+                    </div>
+
+                    <div className="bg-rose-950/60 border border-rose-500/50 p-3 rounded-2xl text-xs space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span className="text-slate-300">จำนวนผู้ประสบภัย:</span>
+                        <span className="font-bold text-white text-sm">{item.victimsCount} คน</span>
+                      </div>
+                      {item.urgentNeeds && (
+                        <div className="flex items-start gap-2">
+                          <Package className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="text-slate-300">ต้องการด่วน: </span>
+                            <span className="font-bold text-amber-300">
+                              {Array.isArray(item.urgentNeeds) ? item.urgentNeeds.join(', ') : item.urgentNeeds}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-slate-800/80 border border-slate-700/80 p-3 rounded-2xl text-xs space-y-1">
+                      <p className="font-semibold text-slate-300">เส้นทางเข้าถึง / จุดสังเกต:</p>
+                      <p className="text-slate-200 leading-relaxed">{item.accessRoute}</p>
+                      {item.address && (
+                        <p className="text-slate-400 text-[11px] pt-1 border-t border-slate-700 mt-1">
+                          ที่อยู่: {item.address}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <a
+                        href={getGoogleMapsDirectionsUrl(item.lat, item.lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold py-2.5 px-3 rounded-xl shadow-lg text-xs no-underline active:scale-95"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span>กู้ภัย: ส่งพิกัดเข้า Google Maps นำทางทันที 🧭</span>
+                      </a>
+
+                      <a
+                        href={`tel:${item.phone}`}
+                        className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl shadow text-xs no-underline active:scale-95"
+                      >
+                        <Phone className="w-4 h-4" />
+                        <span>โทรติดต่อผู้ประสบภัย: {item.phone}</span>
+                      </a>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <a
+                          href={getLineShareUrl(formatSosShareText(item))}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-2 px-2 rounded-xl text-xs no-underline"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span>ส่งเคสเข้า LINE</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(item.id, formatSosShareText(item))}
+                          className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2 px-2 rounded-xl text-xs border border-slate-700"
+                        >
+                          {copiedId === item.id ? (
+                            <>
+                              <Check className="w-4 h-4 text-emerald-400" />
+                              <span className="text-emerald-400 font-bold">คัดลอกแล้ว!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4 text-slate-400" />
+                              <span>คัดลอกข้อความ</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 3. DONATION DETAIL */}
+              {mobileDetailItem.type === 'donation' && (() => {
+                const d = mobileDetailItem.data;
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-heading font-bold text-lg text-white leading-snug">
+                        {d.title}
+                      </h3>
+                      {d.address && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          📍 {d.address} (อ.{d.district})
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Warning banner to call first */}
+                    <div className="bg-rose-950/70 border border-rose-500/70 rounded-2xl p-3 text-center space-y-1">
+                      <div className="flex items-center justify-center gap-1.5 text-rose-300 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                        <span>⚠️ กรุณาโทรเช็กก่อนเดินทางทุกครั้ง!</span>
+                      </div>
+                      <p className="text-[11px] text-rose-200">
+                        โทรสอบถามว่าอาหารหรือของแจกยังมีอยู่หรือไม่ เพื่อไม่ให้เสียเวลาเดินทาง
+                      </p>
+                    </div>
+
+                    {/* Big Call Button */}
+                    <a
+                      href={`tel:${d.contactPhone}`}
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 via-green-600 to-emerald-600 text-white font-black py-3 px-3 rounded-2xl shadow-lg text-sm no-underline active:scale-95 border border-emerald-400/50"
+                    >
+                      <Phone className="w-4 h-4 animate-bounce" />
+                      <span>📞 โทรเช็กข้อมูล: {d.contactPhone}</span>
+                    </a>
+
+                    <div className="bg-slate-800/80 border border-slate-700/80 p-3 rounded-2xl text-xs space-y-1.5">
+                      <div>
+                        <span className="text-slate-400">🕒 เวลาเปิดแจก/เปิดรับ: </span>
+                        <span className="font-bold text-orange-300">{d.operatingHours}</span>
+                      </div>
+                      {d.itemsAvailable && (
+                        <div>
+                          <span className="text-slate-400">📦 สิ่งของที่มีแจก: </span>
+                          <span className="font-medium text-white">{d.itemsAvailable}</span>
+                        </div>
+                      )}
+                      {d.organizerName && (
+                        <div className="text-[11px] text-slate-400">
+                          ผู้จัดตั้ง: {d.organizerName}
+                        </div>
+                      )}
+                      {d.notes && (
+                        <div className="text-[11px] text-slate-300 pt-1 border-t border-slate-700 mt-1">
+                          คำแนะนำ: {d.notes}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <a
+                        href={getGoogleMapsDirectionsUrl(d.lat, d.lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold py-2.5 px-3 rounded-xl shadow text-xs no-underline active:scale-95"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span>นำทางด้วย Google Maps ไปจุดนี้ 🧭</span>
+                      </a>
+
+                      <a
+                        href={getLineShareUrl(formatDonationShareText(d))}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-2 px-3 rounded-xl text-xs no-underline"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>แชร์จุดแจกอาหารนี้เข้า LINE</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const confirmDelete = window.confirm(`คุณต้องการลบจุด "${d.title}" ออกจากแผนที่ใช่หรือไม่?`);
+                          if (!confirmDelete) return;
+                          setMobileDetailItem(null);
+                          if (onDeleteDonation) {
+                            await onDeleteDonation(d.id);
+                          }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 bg-rose-950/80 hover:bg-rose-900 text-rose-300 font-bold py-2 px-3 rounded-xl text-xs border border-rose-600/50"
+                      >
+                        <Trash2 className="w-4 h-4 text-rose-400" />
+                        <span>🗑️ ลบจุดนี้ / แจ้งปิดจุดแจกบริจาค</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 4. RESCUE CENTER DETAIL */}
+              {mobileDetailItem.type === 'rescueCenter' && (() => {
+                const rc = mobileDetailItem.data;
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-heading font-bold text-lg text-white leading-snug">
+                        {rc.name}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        📍 {rc.address} (อ.{rc.district})
+                      </p>
+                    </div>
+
+                    <a
+                      href={`tel:${rc.phone}`}
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white font-black py-3 px-3 rounded-2xl shadow-lg text-sm no-underline active:scale-95"
+                    >
+                      <Phone className="w-4 h-4 animate-bounce" />
+                      <span>📞 โทรขอความช่วยเหลือทันที: {rc.phone}</span>
+                    </a>
+
+                    <div className="bg-slate-800/80 border border-slate-700/80 p-3 rounded-2xl text-xs space-y-1.5">
+                      <div>
+                        <span className="text-slate-400">🕒 สถานะ: </span>
+                        <span className="font-bold text-emerald-400">{rc.operatingHours}</span>
+                      </div>
+                      {rc.equipment && (
+                        <div>
+                          <span className="text-slate-400">ยุทโธปกรณ์: </span>
+                          <span className="text-slate-200">{rc.equipment}</span>
+                        </div>
+                      )}
+                      {rc.coverageArea && (
+                        <div>
+                          <span className="text-slate-400">พื้นที่ดูแล: </span>
+                          <span className="text-slate-200">{rc.coverageArea}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <a
+                        href={getGoogleMapsDirectionsUrl(rc.lat, rc.lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-3 rounded-xl shadow text-xs no-underline active:scale-95"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span>นำทางไปศูนย์กู้ภัยด้วย Google Maps 🧭</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => { setMobileDetailItem(null); onOpenSosModal && onOpenSosModal(); }}
+                        className="w-full flex items-center justify-center gap-2 bg-rose-950/80 hover:bg-rose-900 text-rose-200 font-bold py-2.5 px-3 rounded-xl text-xs border border-rose-600/50"
+                      >
+                        <AlertTriangle className="w-4 h-4 text-rose-400" />
+                        <span>แจ้งปักหมุดขอความช่วยเหลือในระบบ (SOS)</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 5. SHELTER DETAIL */}
+              {mobileDetailItem.type === 'shelter' && (() => {
+                const s = mobileDetailItem.data;
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-heading font-bold text-lg text-white leading-snug">
+                        {s.name}
+                      </h3>
+                      {s.address && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          📍 {s.address} (อ.{s.district})
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="bg-sky-950/60 border border-sky-500/40 p-3 rounded-2xl text-xs space-y-1.5">
+                      <div>
+                        <span className="text-slate-300">👥 ความจุ: </span>
+                        <span className="font-bold text-sky-300">{s.capacity}</span>
+                      </div>
+                      {s.facilities && (
+                        <div className="text-slate-200">
+                          บริการ: {s.facilities.join(', ')}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <a
+                        href={getGoogleMapsDirectionsUrl(s.lat, s.lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sky-600 to-blue-600 text-white font-bold py-2.5 px-3 rounded-xl shadow text-xs no-underline active:scale-95"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span>นำทางด้วย Google Maps ไปศูนย์พักพิง 🧭</span>
+                      </a>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <a
+                          href={`tel:${s.phone}`}
+                          className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-2 rounded-xl text-xs no-underline"
+                        >
+                          <Phone className="w-4 h-4" />
+                          <span>โทร: {s.phone}</span>
+                        </a>
+
+                        <a
+                          href={getLineShareUrl(formatShelterShareText(s))}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-2 px-2 rounded-xl text-xs no-underline"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span>แชร์ LINE</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 6. MY LOCATION DETAIL */}
+              {mobileDetailItem.type === 'myLocation' && (() => {
+                const loc = mobileDetailItem.data;
+                return (
+                  <div className="space-y-3">
+                    <p className="font-bold text-sm text-cyan-400">
+                      📍 พิกัดปัจจุบันของคุณ (GPS)
+                    </p>
+                    <p className="text-xs font-mono bg-slate-800 p-2 rounded-xl text-slate-300">
+                      พิกัด: {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}
+                    </p>
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <a
+                        href={getLineShareUrl(formatMyLocationShareText(loc.lat, loc.lng))}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-[#06C755] text-white font-bold py-2.5 px-3 rounded-xl text-xs no-underline"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>แชร์พิกัดของฉันเข้า LINE 📲</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy('my-loc', formatMyLocationShareText(loc.lat, loc.lng))}
+                        className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2 px-3 rounded-xl text-xs border border-slate-700"
+                      >
+                        {copiedId === 'my-loc' ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-400" />
+                            <span className="text-emerald-400 font-bold">คัดลอกพิกัดแล้ว!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-slate-400" />
+                            <span>คัดลอกพิกัด & ลิงก์แผนที่</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 7. TEMP PICKER DETAIL */}
+              {mobileDetailItem.type === 'temp' && (() => {
+                const coord = mobileDetailItem.data;
+                return (
+                  <div className="space-y-3">
+                    <p className="font-bold text-sm text-blue-400">
+                      🎯 จุดที่คุณเลือก
+                    </p>
+                    <p className="text-xs font-mono bg-slate-800 p-2 rounded-xl text-slate-300">
+                      พิกัด: {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileDetailItem(null);
+                        onClearSelectedCoord && onClearSelectedCoord();
+                      }}
+                      className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 px-3 rounded-xl text-xs shadow-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>ลบ/ยกเลิกจุดที่เลือกนี้ออกจากแผนที่</span>
+                    </button>
+                  </div>
+                );
+              })()}
+
             </div>
           </div>
         </div>
