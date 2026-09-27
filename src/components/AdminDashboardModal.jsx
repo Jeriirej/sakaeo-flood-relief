@@ -34,7 +34,8 @@ export default function AdminDashboardModal({
   onRefreshAllData,
   onDeleteFlood,
   onDeleteSos,
-  onDeleteDonation
+  onDeleteDonation,
+  onStartRelocateFlood
 }) {
   const [activeTab, setActiveTab] = useState('feedbacks'); // feedbacks, points, security, backup
   const [pointsSubTab, setPointsSubTab] = useState('all'); // all, floods, sos, donations
@@ -529,17 +530,33 @@ export default function AdminDashboardModal({
                       </div>
                     </div>
 
-                    <button
-                      onClick={async () => {
-                        if (window.confirm(`Admin: ต้องการลบจุด "${item.title}" ออกจากแผนที่ใช่หรือไม่?`)) {
-                          if (onDeleteFlood) await onDeleteFlood(item.id);
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1 shadow shrink-0 transition-transform active:scale-95"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>ลบจุดนี้</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {onStartRelocateFlood && (
+                        <button
+                          onClick={() => {
+                            onClose();
+                            onStartRelocateFlood(item);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 shadow transition-transform active:scale-95"
+                          title="ลากหมุดไปวางบนถนนจริงบนแผนที่"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-blue-200" />
+                          <span>ลากปรับพิกัด</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`Admin: ต้องการลบจุด "${item.title}" ออกจากแผนที่ใช่หรือไม่?`)) {
+                            if (onDeleteFlood) await onDeleteFlood(item.id);
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1 shadow transition-transform active:scale-95"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>ลบจุดนี้</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
 

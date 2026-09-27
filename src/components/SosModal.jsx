@@ -78,12 +78,43 @@ export default function SosModal({ isOpen, onClose, onSubmitSuccess, onPickLocat
     });
   };
 
-  // เช็ก cooldown กันสแปม
+  // ดึงหรือสร้าง Device ID ถาวรสำหรับเครื่องนี้
+  const getDeviceId = () => {
+    let devId = localStorage.getItem('sakaeo_device_id');
+    if (!devId) {
+      devId = 'dev_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem('sakaeo_device_id', devId);
+    }
+    return devId;
+  };
+
+  const existingSosId = localStorage.getItem('sakaeo_my_sos_id');
+
+  // ดึงข้อมูลเดิมมาช่วยเติม ถ้าเคยกดส่งจากเครื่องนี้
+  useEffect(() => {
+    try {
+      const savedData = localStorage.getItem('sakaeo_my_sos_data');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        setFormData(prev => ({
+          ...prev,
+          name: prev.name || parsed.name || '',
+          phone: prev.phone || parsed.phone || '',
+          address: prev.address || parsed.address || '',
+          victimsCount: prev.victimsCount || parsed.victimsCount || '',
+          accessRoute: prev.accessRoute || parsed.accessRoute || ''
+        }));
+      }
+    } catch {}
+  }, []);
+
+  // เช็ก cooldown กันสแปม (ถ้าเป็นการอัปเดตจากเครื่องเดิม ให้รอน้อยลงเหลือ 10 วิ)
   const lastSosTime = parseInt(localStorage.getItem('sakaeo_last_sos_time') || '0', 10);
   const now = Date.now();
   const secondsSinceLast = Math.floor((now - lastSosTime) / 1000);
-  const isCooldown = secondsSinceLast < 45;
-  const cooldownRemaining = 45 - secondsSinceLast;
+  const cooldownLimit = existingSosId ? 10 : 45;
+  const isCooldown = secondsSinceLast < cooldownLimit;
+  const cooldownRemaining = cooldownLimit - secondsSinceLast;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -101,16 +132,22 @@ export default function SosModal({ isOpen, onClose, onSubmitSuccess, onPickLocat
     }
 
     if (isCooldown) {
-      alert(`⚠️ ระบบกำลังประสานงานคำขอเดิมของคุณ กรุณารออีก ${cooldownRemaining} วินาที ก่อนส่งคำขอใหม่ หรือหากวิกฤตโปรดโทร 1669 ทันที`);
+      alert(`⚠️ ระบบกำลังประสานงานคำขอของคุณ กรุณารออีก ${cooldownRemaining} วินาที หรือหากมีเหตุวิกฤตโปรดโทร 1669 ทันที`);
       return;
     }
 
     setSubmitting(true);
     try {
+      const payload = {
+        ...formData,
+        deviceId: getDeviceId(),
+        previousSosId: existingSosId || undefined
+      };
+
       const res = await fetch('/api/sos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
       
       const data = await res.json();
@@ -124,7 +161,12 @@ export default function SosModal({ isOpen, onClose, onSubmitSuccess, onPickLocat
       localStorage.setItem('sakaeo_my_sos_data', JSON.stringify(data));
       localStorage.setItem('sakaeo_last_sos_time', Date.now().toString());
 
-      alert('✅ ส่งข้อมูลขอความช่วยเหลือเรียบร้อยแล้ว! ข้อมูลได้ถูกบันทึกไว้ในเครื่องคุณ และส่งถึงทีมกู้ภัยแล้ว ท่านสามารถติดตามสถานะการช่วยเหลือได้ที่แถบด้านบนของหน้าจอ');
+      if (data.isUpdate) {
+        alert('🔄 ตรวจพบคำขอเดิมของคุณ: ระบบได้อัปเดตพิกัดล่าสุดและความต้องการเพิ่มเติมเข้าสู่คำขอเดิมเรียบร้อยแล้ว (ไม่สร้างหมุดซ้ำบนแผนที่) ทีมกู้ภัยได้รับข้อมูลล่าสุดทันที!');
+      } else {
+        alert('✅ ส่งข้อมูลขอความช่วยเหลือเรียบร้อยแล้ว! ข้อมูลได้ถูกบันทึกไว้ในเครื่องคุณ และส่งถึงทีมกู้ภัยแล้ว ท่านสามารถติดตามสถานะการช่วยเหลือได้ที่แถบด้านบนของหน้าจอ');
+      }
+
       onSubmitSuccess && onSubmitSuccess(data);
       onClose();
     } catch (err) {
@@ -146,7 +188,7 @@ export default function SosModal({ isOpen, onClose, onSubmitSuccess, onPickLocat
             </div>
             <div>
               <h3 className="font-heading font-bold text-lg sm:text-xl">
-                ขอความช่วยเหลือฉุกเฉิน (SOS)
+                {existingSosId ? 'อัปเดตคำขอความช่วยเหลือฉุกเฉิน (SOS)' : 'ขอความช่วยเหลือฉุกเฉิน (SOS)'}
               </h3>
               <p className="text-xs text-rose-100">
                 ส่งพิกัด GPS และสิ่งที่ต้องการด่วนถึงทีมกู้ภัยสระแก้ว
@@ -160,6 +202,16 @@ export default function SosModal({ isOpen, onClose, onSubmitSuccess, onPickLocat
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Notice for repeat user */}
+        {existingSosId && (
+          <div className="bg-amber-950/90 border-b border-amber-500/50 px-4 py-2 text-xs text-amber-200 flex items-center gap-2">
+            <span className="text-base shrink-0">🔄</span>
+            <span>
+              <strong>ตรวจพบคำขอเดิมจากเครื่องนี้:</strong> หากส่งซ้ำ ระบบจะ<strong>อัปเดตพิกัดและสิ่งของที่ต้องการ</strong>เข้าสู่คำขอเดิมทันที เพื่อให้กู้ภัยเห็นข้อมูลล่าสุดและไม่เกิดหมุดซ้ำ
+            </span>
+          </div>
+        )}
 
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1 text-sm text-slate-200">

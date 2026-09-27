@@ -380,7 +380,7 @@ app.post('/api/clear-sample', (req, res) => {
 
 app.patch('/api/floods/:id', (req, res) => {
   const { id } = req.params;
-  const { severity, waterLevel, passableFor, recommendedRoute, description, radius, reporterName, updateNote } = req.body;
+  const { severity, waterLevel, passableFor, recommendedRoute, description, radius, reporterName, updateNote, lat, lng } = req.body;
 
   let floods = readData(FLOODS_FILE, INITIAL_FLOODS);
   const target = floods.find(item => item.id === id);
@@ -396,6 +396,10 @@ app.patch('/api/floods/:id', (req, res) => {
   if (description !== undefined) target.description = description;
   if (radius) target.radius = parseInt(radius);
   if (reporterName) target.reporterName = reporterName;
+  if (lat !== undefined && lng !== undefined) {
+    target.lat = parseFloat(lat);
+    target.lng = parseFloat(lng);
+  }
 
   target.updatedAt = new Date().toISOString();
 
@@ -437,7 +441,7 @@ function getClientIp(req) {
 }
 
 app.post('/api/sos', (req, res) => {
-  const { name, phone, lat, lng, address, urgentNeeds, victimsCount, accessRoute, notes } = req.body;
+  const { name, phone, lat, lng, address, urgentNeeds, victimsCount, accessRoute, notes, deviceId, previousSosId } = req.body;
 
   // 1. ตรวจสอบเบอร์โทรศัพท์ (บังคับกรอก และต้องเป็นตัวเลข 9-10 หลัก)
   const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
@@ -452,7 +456,52 @@ app.post('/api/sos', (req, res) => {
     return res.status(400).json({ error: 'กรุณาระบุพิกัด GPS หรือกดปุ่ม "ดึงพิกัด GPS อัตโนมัติ" เพื่อให้ทีมกู้ภัยเดินทางไปได้ถูกต้อง' });
   }
 
-  // 3. ระบบกันสแปม (Rate Limit ป้องกันการกดยิงซ้ำรัวๆ)
+  const sosList = readData(SOS_FILE, INITIAL_SOS);
+
+  // 3. ตรวจสอบว่ามีคำขอความช่วยเหลือที่ยังไม่เสร็จสิ้น (active) จากเครื่องเดียวกัน หรือเบอร์เดียวกันอยู่แล้วหรือไม่
+  const activeExistingSos = sosList.find(item => {
+    const isOngoing = item.status !== 'resolved' && item.status !== 'cancelled';
+    if (!isOngoing) return false;
+    const samePhone = item.phone && item.phone.replace(/[^0-9]/g, '') === cleanPhone;
+    const sameDevice = deviceId && item.deviceId && item.deviceId === deviceId;
+    const samePrevId = previousSosId && item.id === previousSosId;
+    return samePhone || sameDevice || samePrevId;
+  });
+
+  if (activeExistingSos) {
+    // อัปเดตข้อมูลคำขอเดิมแทนการสร้างหมุดซ้ำบนแผนที่
+    activeExistingSos.lat = parseFloat(lat);
+    activeExistingSos.lng = parseFloat(lng);
+    if (address?.trim()) activeExistingSos.address = address.trim();
+    if (name?.trim()) activeExistingSos.name = name.trim();
+    if (victimsCount?.trim()) activeExistingSos.victimsCount = victimsCount.trim();
+    if (accessRoute?.trim()) activeExistingSos.accessRoute = accessRoute.trim();
+    if (!activeExistingSos.deviceId && deviceId) activeExistingSos.deviceId = deviceId;
+
+    // รวมรายการของที่ต้องการเร่งด่วนเข้าด้วยกัน
+    const incomingNeeds = Array.isArray(urgentNeeds) ? urgentNeeds : [urgentNeeds].filter(Boolean);
+    activeExistingSos.urgentNeeds = Array.from(new Set([...(activeExistingSos.urgentNeeds || []), ...incomingNeeds]));
+
+    // บันทึกหมายเหตุเพิ่มเติมพร้อมเวลา
+    const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    if (notes?.trim()) {
+      activeExistingSos.notes = activeExistingSos.notes 
+        ? `${activeExistingSos.notes}\n• [อัปเดต ${timeStr}]: ${notes.trim()}`
+        : `[อัปเดต ${timeStr}]: ${notes.trim()}`;
+    }
+
+    activeExistingSos.updateCount = (activeExistingSos.updateCount || 1) + 1;
+    activeExistingSos.updatedAt = new Date().toISOString();
+
+    writeData(SOS_FILE, sosList);
+    return res.status(200).json({
+      ...activeExistingSos,
+      isUpdate: true,
+      message: `ระบบตรวจพบคำขอเดิมของคุณ และได้ทำการอัปเดตข้อมูลและพิกัดล่าสุดเรียบร้อยแล้ว (อัปเดตครั้งที่ ${activeExistingSos.updateCount})`
+    });
+  }
+
+  // 4. ระบบกันสแปมสำหรับคำขอใหม่ (Rate Limit ป้องกันการกดยิงซ้ำรัวๆ)
   const clientIp = getClientIp(req);
   const now = Date.now();
   const lastSubmit = sosRateLimitMap.get(clientIp);
@@ -474,11 +523,11 @@ app.post('/api/sos', (req, res) => {
     }
   }
 
-  const sosList = readData(SOS_FILE, INITIAL_SOS);
   const newSos = {
     id: `sos-${Date.now()}`,
     name: name?.trim() || 'ผู้ประสบภัย (ไม่ประสงค์ออกนาม)',
     phone: phone.trim(),
+    deviceId: deviceId || '',
     lat: parseFloat(lat),
     lng: parseFloat(lng),
     address: address?.trim() || 'ไม่ระบุที่อยู่แน่ชัด (ใช้พิกัด GPS)',
@@ -488,6 +537,7 @@ app.post('/api/sos', (req, res) => {
     notes: notes?.trim() || '',
     status: 'pending',
     assignedTo: '',
+    updateCount: 1,
     createdAt: new Date().toISOString()
   };
 

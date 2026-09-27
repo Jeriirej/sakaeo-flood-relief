@@ -298,6 +298,58 @@ export default function App() {
     }
   };
 
+  // Admin Authentication State
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
+    try {
+      return localStorage.getItem('sakaeo_admin_authenticated') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // State สำหรับโหมด Admin ลากปรับพิกัดหมุดบนแผนที่
+  const [relocatingFlood, setRelocatingFlood] = useState(null);
+
+  const handleStartRelocateFlood = (floodItem) => {
+    setRelocatingFlood(floodItem);
+    setActiveTab('map');
+  };
+
+  const handleCancelRelocateFlood = () => {
+    setRelocatingFlood(null);
+  };
+
+  const handleSaveRelocatedCoordinate = async (id, newLat, newLng) => {
+    try {
+      const res = await fetch(`/api/floods/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: newLat,
+          lng: newLng,
+          updateNote: 'แอดมินลากปรับตำแหน่งหมุดบนแผนที่ให้ตรงถนนจริง'
+        })
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setFloods(prev => {
+          const list = prev.map(item => item.id === id ? { ...item, lat: newLat, lng: newLng } : item);
+          localStorage.setItem('sakaeo_floods_cache', JSON.stringify(list));
+          return list;
+        });
+        setRelocatingFlood(null);
+        alert(`✅ ปรับย้ายพิกัดของ "${updated.title}" ไปที่ (${newLat.toFixed(6)}, ${newLng.toFixed(6)}) สำเร็จแล้ว! ข้อมูลรายละเอียดเดิมทั้งหมดยังคงอยู่ครบถ้วน 100%`);
+        return true;
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'ไม่สามารถบันทึกพิกัดใหม่ได้');
+      }
+    } catch (err) {
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    }
+  };
+
   // Admin ลบจุดน้ำท่วม
   const handleDeleteFlood = async (id) => {
     try {
@@ -427,6 +479,11 @@ export default function App() {
             rescueCenters={rescueCenters}
             donations={donations}
             shelters={shelters}
+            isAdmin={isAdminLoggedIn}
+            relocatingFlood={relocatingFlood}
+            onStartRelocateFlood={handleStartRelocateFlood}
+            onCancelRelocate={handleCancelRelocateFlood}
+            onSaveRelocatedCoordinate={handleSaveRelocatedCoordinate}
             onSelectCoordinate={handleMapLocationSelected}
             isSelectingLocation={isSelectingLocation}
             selectedTempCoord={tempPickerCoord}
@@ -615,6 +672,11 @@ export default function App() {
         isOpen={isAdminLoginOpen}
         onClose={() => setIsAdminLoginOpen(false)}
         onLoginSuccess={(token, secretKey) => {
+          setIsAdminLoggedIn(true);
+          try {
+            localStorage.setItem('sakaeo_admin_authenticated', 'true');
+            if (token) localStorage.setItem('sakaeo_admin_token', token);
+          } catch (e) {}
           setIsAdminLoginOpen(false);
           setIsAdminDashboardOpen(true);
         }}
@@ -632,6 +694,7 @@ export default function App() {
           onDeleteFlood={handleDeleteFlood}
           onDeleteSos={handleDeleteSos}
           onDeleteDonation={handleDeleteDonation}
+          onStartRelocateFlood={handleStartRelocateFlood}
         />
       </AdminErrorBoundary>
 

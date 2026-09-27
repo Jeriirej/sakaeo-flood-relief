@@ -99,6 +99,11 @@ export default function FloodMap({
   rescueCenters = [],
   donations = [],
   shelters = [],
+  isAdmin = false,
+  relocatingFlood = null,
+  onStartRelocateFlood,
+  onCancelRelocate,
+  onSaveRelocatedCoordinate,
   onSelectCoordinate, 
   isSelectingLocation = false,
   selectedTempCoord = null,
@@ -122,6 +127,18 @@ export default function FloodMap({
   const [myLocation, setMyLocation] = useState(null);
   const [locating, setLocating] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+
+  // Admin Relocate Marker Confirmation State
+  const [pendingRelocationCoords, setPendingRelocationCoords] = useState(null); // { id, title, oldLat, oldLng, newLat, newLng }
+  const [savingRelocation, setSavingRelocation] = useState(false);
+
+  // Auto center map when entering relocate mode
+  useEffect(() => {
+    if (relocatingFlood && relocatingFlood.lat && relocatingFlood.lng) {
+      setMapCenter([relocatingFlood.lat, relocatingFlood.lng]);
+      setMapZoom(16);
+    }
+  }, [relocatingFlood]);
 
   // Mobile Separate Detail Popup Modal State
   const [mobileDetailItem, setMobileDetailItem] = useState(null);
@@ -603,6 +620,24 @@ export default function FloodMap({
               <span>แตะบนแผนที่เพื่อเลือกจุดเกิดเหตุ</span>
             </div>
           )}
+
+          {relocatingFlood && (
+            <div className="bg-blue-600/95 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xl border border-blue-400 flex items-center justify-between gap-2 max-w-sm animate-pulse">
+              <div className="flex items-center gap-1.5 truncate">
+                <MapPin className="w-4 h-4 text-amber-300 shrink-0" />
+                <span className="truncate">กำลังปรับพิกัด: <span className="text-amber-300 underline">{relocatingFlood.title}</span> (ลากหมุดไปวางบนถนนจริง)</span>
+              </div>
+              {onCancelRelocate && (
+                <button
+                  type="button"
+                  onClick={onCancelRelocate}
+                  className="bg-slate-900/80 hover:bg-slate-900 text-[10px] text-slate-200 px-2 py-0.5 rounded-lg border border-slate-700 shrink-0 transition-colors"
+                >
+                  ยกเลิก
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -780,192 +815,228 @@ export default function FloodMap({
         ))}
 
         {/* Flood Condition Markers */}
-        {filteredFloods.map(item => (
-          <Marker
-            key={item.id}
-            position={[item.lat, item.lng]}
-            icon={createCustomMarkerIcon(item.severity, { label: getShortLocationLabel(item) })}
-            eventHandlers={{
-              click: () => {
-                if (isMobile) {
-                  setMobileDetailItem({ type: 'flood', data: item });
+        {filteredFloods.map(item => {
+          const isBeingRelocated = relocatingFlood?.id === item.id;
+          return (
+            <Marker
+              key={item.id}
+              position={[item.lat, item.lng]}
+              draggable={isBeingRelocated}
+              zIndexOffset={isBeingRelocated ? 1000 : 0}
+              icon={createCustomMarkerIcon(item.severity, { 
+                label: isBeingRelocated ? `📍 ลากฉัน (${getShortLocationLabel(item)})` : getShortLocationLabel(item) 
+              })}
+              eventHandlers={{
+                dragend: (e) => {
+                  const marker = e.target;
+                  const position = marker.getLatLng();
+                  setPendingRelocationCoords({
+                    id: item.id,
+                    title: item.title,
+                    oldLat: item.lat,
+                    oldLng: item.lng,
+                    newLat: position.lat,
+                    newLng: position.lng
+                  });
+                },
+                click: () => {
+                  if (isMobile) {
+                    setMobileDetailItem({ type: 'flood', data: item });
+                  }
                 }
-              }
-            }}
-          >
-            {!isMobile && (
-              <Popup className="custom-popup" maxWidth={320}>
-              <div className="p-1 text-slate-900 text-sm">
-                
-                {/* Sample data alert notice */}
-                {item.isSample && (
-                  <div className="bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-semibold px-2 py-0.5 rounded mb-1.5 flex items-center gap-1">
-                    <span>ℹ️ ข้อมูลตัวอย่างจำลองเพื่อทดสอบระบบ</span>
-                  </div>
-                )}
-
-                {/* Header Badge */}
-                <div className="flex items-center justify-between gap-2 border-b pb-2 mb-2">
-                  <div className="flex items-center gap-1.5">
-                    {item.severity === 'danger' && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
-                        🔴 ทางขาด / ห้ามผ่านเด็ดขาด
-                      </span>
-                    )}
-                    {item.severity === 'warning' && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                        🟡 เฝ้าระวัง / รถเล็กเลี่ยง
-                      </span>
-                    )}
-                    {item.severity === 'safe' && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        🟢 เส้นทางเลี่ยงสัญจรได้
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {formatThaiDateTime(item.updatedAt)}
-                  </span>
-                </div>
-
-                {/* Road Title */}
-                <h4 className="font-bold text-base text-slate-900 leading-snug mb-1">
-                  {item.title}
-                </h4>
-                <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-600 mb-2">
-                  <span>📍 อ.{item.district} {item.subdistrict ? `ต.${item.subdistrict}` : ''}</span>
-                  <div className="flex items-center gap-1">
-                    {item.reportCount > 1 && (
-                      <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 flex items-center gap-0.5" title="มีผู้ใช้ร่วมแจ้งยืนยันจุดนี้และระบบรวมเป็นจุดเดียวกัน">
-                        👥 ยืนยัน {item.reportCount} คน
-                      </span>
-                    )}
-                    <span className="text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                      รัศมี ~{item.radius || 400} ม.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Water Level & Vehicles */}
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 mb-2 space-y-1 text-xs">
-                  <div className="flex items-start gap-1.5">
-                    <span className="font-semibold text-slate-700 shrink-0">ระดับน้ำ:</span>
-                    <span className="font-bold text-rose-600">{item.waterLevel}</span>
-                  </div>
-                  <div className="flex items-start gap-1.5">
-                    <Car className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
-                    <span className="text-slate-800">{item.passableFor}</span>
-                  </div>
-                </div>
-
-                {/* Recommended Bypass Route */}
-                {item.recommendedRoute && (
-                  <div className="bg-emerald-50 border border-emerald-200 p-2 rounded-lg mb-2 text-xs">
-                    <p className="font-bold text-emerald-800 flex items-center gap-1 mb-0.5">
-                      <Navigation className="w-3.5 h-3.5" /> เส้นทางเลี่ยงที่แนะนำ:
-                    </p>
-                    <p className="text-emerald-950 leading-relaxed">
-                      {item.recommendedRoute}
-                    </p>
-                  </div>
-                )}
-
-                {/* Latest update note if exists */}
-                {item.updateHistory && item.updateHistory.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-300 p-2 rounded-lg mb-2 text-[11px] text-amber-950">
-                    <div className="font-bold flex items-center gap-1 text-amber-900">
-                      <span>🔔 มีการอัปเดตล่าสุด:</span>
-                    </div>
-                    <p className="text-slate-800 font-medium mt-0.5">{item.updateHistory[0].note}</p>
-                    <span className="text-[10px] text-slate-500">
-                      ({formatThaiDateTime(item.updateHistory[0].timestamp)} โดย {item.updateHistory[0].reporterName})
-                    </span>
-                  </div>
-                )}
-
-                {/* Additional Description */}
-                {item.description && (
-                  <p className="text-xs text-slate-600 mb-2.5 bg-white p-2 rounded border border-slate-100">
-                    {item.description}
-                  </p>
-                )}
-
-                {/* ACTION BUTTONS */}
-                <div className="space-y-1.5 pt-1 border-t border-slate-200">
+              }}
+            >
+              {isBeingRelocated && (
+                <Tooltip permanent direction="top" offset={[0, -20]} className="custom-tooltip font-bold text-xs bg-blue-900 text-white border border-blue-400">
+                  📍 ลากไปวางบนถนนจริงแล้วปล่อยมือ
+                </Tooltip>
+              )}
+              {!isMobile && (
+                <Popup className="custom-popup" maxWidth={320}>
+                <div className="p-1 text-slate-900 text-sm">
                   
-                  {/* LIVE UPDATE STATUS BUTTON (NEW CROWDSOURCING FEATURE) */}
-                  <button
-                    type="button"
-                    onClick={() => onOpenUpdateModal && onOpenUpdateModal(item)}
-                    className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold py-2 px-3 rounded-xl shadow text-xs transition-transform active:scale-95 border border-amber-400"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-slate-950" />
-                    <span>📢 อัปเดตสถานการณ์จุดนี้ (น้ำลด / น้ำเพิ่ม)</span>
-                  </button>
+                  {/* Sample data alert notice */}
+                  {item.isSample && (
+                    <div className="bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-semibold px-2 py-0.5 rounded mb-1.5 flex items-center gap-1">
+                      <span>ℹ️ ข้อมูลตัวอย่างจำลองเพื่อทดสอบระบบ</span>
+                    </div>
+                  )}
 
-                  {/* GOOGLE MAPS NAVIGATION BUTTON (FIXED ULTRA-CLEAR CONTRAST) */}
-                  <a
-                    href={getGoogleMapsDirectionsUrl(item.lat, item.lng)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-google-maps w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl shadow-md text-xs font-bold transition-transform active:scale-95 no-underline"
-                    style={{ color: '#ffffff', backgroundColor: '#1a73e8', textDecoration: 'none' }}
-                  >
-                    <Navigation className="w-4 h-4 text-white shrink-0" style={{ color: '#ffffff' }} />
-                    <span className="text-white font-bold" style={{ color: '#ffffff' }}>
-                      เปิดแอป Google Maps นำทางไปจุดนี้ 🧭
+                  {/* Header Badge */}
+                  <div className="flex items-center justify-between gap-2 border-b pb-2 mb-2">
+                    <div className="flex items-center gap-1.5">
+                      {item.severity === 'danger' && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                          🔴 ทางขาด / ห้ามผ่านเด็ดขาด
+                        </span>
+                      )}
+                      {item.severity === 'warning' && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          🟡 เฝ้าระวัง / รถเล็กเลี่ยง
+                        </span>
+                      )}
+                      {item.severity === 'safe' && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          🟢 เส้นทางเลี่ยงสัญจรได้
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {formatThaiDateTime(item.updatedAt)}
                     </span>
-                  </a>
+                  </div>
 
-                  {/* SHARE BUTTONS */}
-                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                    <a
-                      href={getLineShareUrl(formatFloodShareText(item))}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-1.5 px-2 rounded-lg text-[11px] no-underline shadow-sm transition-colors"
-                      title="ส่งต่อเข้ากลุ่ม LINE"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>แชร์เข้า LINE</span>
-                    </a>
+                  {/* Road Title */}
+                  <h4 className="font-bold text-base text-slate-900 leading-snug mb-1">
+                    {item.title}
+                  </h4>
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-600 mb-2">
+                    <span>📍 อ.{item.district} {item.subdistrict ? `ต.${item.subdistrict}` : ''}</span>
+                    <div className="flex items-center gap-1">
+                      {item.reportCount > 1 && (
+                        <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 flex items-center gap-0.5" title="มีผู้ใช้ร่วมแจ้งยืนยันจุดนี้และระบบรวมเป็นจุดเดียวกัน">
+                          👥 ยืนยัน {item.reportCount} คน
+                        </span>
+                      )}
+                      <span className="text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                        รัศมี ~{item.radius || 400} ม.
+                      </span>
+                    </div>
+                  </div>
 
+                  {/* Water Level & Vehicles */}
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 mb-2 space-y-1 text-xs">
+                    <div className="flex items-start gap-1.5">
+                      <span className="font-semibold text-slate-700 shrink-0">ระดับน้ำ:</span>
+                      <span className="font-bold text-rose-600">{item.waterLevel}</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <Car className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
+                      <span className="text-slate-800">{item.passableFor}</span>
+                    </div>
+                  </div>
+
+                  {/* Recommended Bypass Route */}
+                  {item.recommendedRoute && (
+                    <div className="bg-emerald-50 border border-emerald-200 p-2 rounded-lg mb-2 text-xs">
+                      <p className="font-bold text-emerald-800 flex items-center gap-1 mb-0.5">
+                        <Navigation className="w-3.5 h-3.5" /> เส้นทางเลี่ยงที่แนะนำ:
+                      </p>
+                      <p className="text-emerald-950 leading-relaxed">
+                        {item.recommendedRoute}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Latest update note if exists */}
+                  {item.updateHistory && item.updateHistory.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-300 p-2 rounded-lg mb-2 text-[11px] text-amber-950">
+                      <div className="font-bold flex items-center gap-1 text-amber-900">
+                        <span>🔔 มีการอัปเดตล่าสุด:</span>
+                      </div>
+                      <p className="text-slate-800 font-medium mt-0.5">{item.updateHistory[0].note}</p>
+                      <span className="text-[10px] text-slate-500">
+                        ({formatThaiDateTime(item.updateHistory[0].timestamp)} โดย {item.updateHistory[0].reporterName})
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Additional Description */}
+                  {item.description && (
+                    <p className="text-xs text-slate-600 mb-2.5 bg-white p-2 rounded border border-slate-100">
+                      {item.description}
+                    </p>
+                  )}
+
+                  {/* ACTION BUTTONS */}
+                  <div className="space-y-1.5 pt-1 border-t border-slate-200">
+                    
+                    {/* ADMIN RELOCATE BUTTON */}
+                    {isAdmin && onStartRelocateFlood && !isBeingRelocated && (
+                      <button
+                        type="button"
+                        onClick={() => onStartRelocateFlood(item)}
+                        className="w-full flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-xl shadow text-xs transition-transform active:scale-95 border border-blue-400"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>🛠️ ลากปรับพิกัดหมุดนี้ให้ตรงถนนจริง (Admin)</span>
+                      </button>
+                    )}
+
+                    {/* LIVE UPDATE STATUS BUTTON (NEW CROWDSOURCING FEATURE) */}
                     <button
                       type="button"
-                      onClick={() => handleCopy(item.id, formatFloodShareText(item))}
-                      className="flex items-center justify-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-[11px] border border-slate-300 transition-colors"
+                      onClick={() => onOpenUpdateModal && onOpenUpdateModal(item)}
+                      className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold py-2 px-3 rounded-xl shadow text-xs transition-transform active:scale-95 border border-amber-400"
                     >
-                      {copiedId === item.id ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-700 font-bold">คัดลอกแล้ว!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-slate-500" />
-                          <span>คัดลอกข้อความ</span>
-                        </>
-                      )}
+                      <Edit3 className="w-3.5 h-3.5 text-slate-950" />
+                      <span>📢 อัปเดตสถานการณ์จุดนี้ (น้ำลด / น้ำเพิ่ม)</span>
                     </button>
+
+                    {/* GOOGLE MAPS NAVIGATION BUTTON (FIXED ULTRA-CLEAR CONTRAST) */}
+                    <a
+                      href={getGoogleMapsDirectionsUrl(item.lat, item.lng)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-google-maps w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl shadow-md text-xs font-bold transition-transform active:scale-95 no-underline"
+                      style={{ color: '#ffffff', backgroundColor: '#1a73e8', textDecoration: 'none' }}
+                    >
+                      <Navigation className="w-4 h-4 text-white shrink-0" style={{ color: '#ffffff' }} />
+                      <span className="text-white font-bold" style={{ color: '#ffffff' }}>
+                        เปิดแอป Google Maps นำทางไปจุดนี้ 🧭
+                      </span>
+                    </a>
+
+                    {/* SHARE BUTTONS */}
+                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                      <a
+                        href={getLineShareUrl(formatFloodShareText(item))}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-1.5 px-2 rounded-lg text-[11px] no-underline shadow-sm transition-colors"
+                        title="ส่งต่อเข้ากลุ่ม LINE"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>แชร์เข้า LINE</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(item.id, formatFloodShareText(item))}
+                        className="flex items-center justify-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-[11px] border border-slate-300 transition-colors"
+                      >
+                        {copiedId === item.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 font-bold">คัดลอกแล้ว!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-500" />
+                            <span>คัดลอกข้อความ</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {item.contactPhone && (
+                      <a
+                        href={`tel:${item.contactPhone}`}
+                        className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-1.5 px-3 rounded-lg text-xs no-underline border border-slate-300"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>โทรสอบถามข้อมูล: {item.contactPhone}</span>
+                      </a>
+                    )}
                   </div>
 
-                  {item.contactPhone && (
-                    <a
-                      href={`tel:${item.contactPhone}`}
-                      className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-1.5 px-3 rounded-lg text-xs no-underline border border-slate-300"
-                    >
-                      <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>โทรสอบถามข้อมูล: {item.contactPhone}</span>
-                    </a>
-                  )}
                 </div>
-
-              </div>
-            </Popup>
-            )}
-          </Marker>
-        ))}
+              </Popup>
+              )}
+            </Marker>
+          );
+        })}
 
         {/* SOS Emergency Markers (เด่นกว่าทุกจุดด้วยไฟไซเรน และป้ายข้อมูลโชว์ขึ้นมาเลย) */}
         {filteredSos.map(item => {
@@ -1754,6 +1825,20 @@ export default function FloodMap({
 
                     {/* Actions */}
                     <div className="space-y-2 pt-2 border-t border-slate-800">
+                      {isAdmin && onStartRelocateFlood && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileDetailItem(null);
+                            onStartRelocateFlood(item);
+                          }}
+                          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl shadow text-xs active:scale-95 border border-blue-400"
+                        >
+                          <MapPin className="w-4 h-4" />
+                          <span>🛠️ ลากปรับพิกัดหมุดนี้ให้ตรงถนนจริง (Admin)</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => { setMobileDetailItem(null); onOpenUpdateModal && onOpenUpdateModal(item); }}
@@ -2213,6 +2298,68 @@ export default function FloodMap({
                 );
               })()}
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Marker Relocation Confirmation Modal */}
+      {pendingRelocationCoords && (
+        <div className="fixed inset-0 z-[2000] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 max-w-sm w-full text-white shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/30">
+                <MapPin className="w-6 h-6 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">บันทึกตำแหน่งพิกัดใหม่?</h3>
+                <p className="text-xs text-slate-400">ข้อมูลรายละเอียดเดิมทั้งหมดยังคงอยู่ครบถ้วน 100%</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/80 rounded-2xl p-3 border border-slate-700/80 space-y-2 text-xs">
+              <div className="font-bold text-amber-400 truncate">{pendingRelocationCoords.title}</div>
+              <div className="flex justify-between text-slate-400">
+                <span>พิกัดเดิม:</span>
+                <span className="font-mono text-slate-300">{pendingRelocationCoords.oldLat.toFixed(5)}, {pendingRelocationCoords.oldLng.toFixed(5)}</span>
+              </div>
+              <div className="flex justify-between text-blue-400 font-semibold border-t border-slate-700/60 pt-1">
+                <span>พิกัดใหม่ที่ลาก:</span>
+                <span className="font-mono text-emerald-400 font-bold">{pendingRelocationCoords.newLat.toFixed(5)}, {pendingRelocationCoords.newLng.toFixed(5)}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setPendingRelocationCoords(null)}
+                disabled={savingRelocation}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors"
+              >
+                ลากปรับใหม่
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setSavingRelocation(true);
+                  try {
+                    if (onSaveRelocatedCoordinate) {
+                      await onSaveRelocatedCoordinate(
+                        pendingRelocationCoords.id,
+                        pendingRelocationCoords.newLat,
+                        pendingRelocationCoords.newLng
+                      );
+                    }
+                  } finally {
+                    setSavingRelocation(false);
+                    setPendingRelocationCoords(null);
+                  }
+                }}
+                disabled={savingRelocation}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg transition-transform active:scale-95"
+              >
+                {savingRelocation ? 'กำลังบันทึก...' : '✅ ยืนยันบันทึก'}
+              </button>
             </div>
           </div>
         </div>
