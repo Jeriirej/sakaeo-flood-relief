@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Navbar from './components/Navbar';
 import FloodMap from './components/FloodMap';
 import RescueDashboard from './components/RescueDashboard';
@@ -18,6 +18,7 @@ import AdminErrorBoundary from './components/AdminErrorBoundary';
 import UserGuideModal from './components/UserGuideModal';
 import WeatherAlertBanner from './components/WeatherAlertBanner';
 import MySosBanner from './components/MySosBanner';
+import SosOverdueModal from './components/SosOverdueModal';
 import { MapPin, Navigation, Home, LifeBuoy, PhoneCall } from 'lucide-react';
 
 export default function App() {
@@ -46,6 +47,15 @@ export default function App() {
   const [mySosId, setMySosId] = useState(() => {
     try {
       return localStorage.getItem('sakaeo_my_sos_id') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Track persistent device ID
+  const [myDeviceId] = useState(() => {
+    try {
+      return localStorage.getItem('sakaeo_device_id') || null;
     } catch {
       return null;
     }
@@ -423,7 +433,46 @@ export default function App() {
   };
 
   // ค้นหาข้อมูลคำขอของเครื่องนี้
-  const mySos = mySosId ? sosRequests.find(s => s.id === mySosId) : null;
+  const mySos = useMemo(() => {
+    if (!sosRequests || sosRequests.length === 0) return null;
+    return sosRequests.find(s => {
+      if (s.status === 'resolved' || s.status === 'cancelled') return false;
+      if (mySosId && s.id === mySosId) return true;
+      if (myDeviceId && s.deviceId === myDeviceId) return true;
+      return false;
+    }) || null;
+  }, [sosRequests, mySosId, myDeviceId]);
+
+  // ระบบแจ้งเตือนฉุกเฉินกรณีคำขอค้างเกิน 5 ชั่วโมง
+  const [isSosOverdueModalOpen, setIsSosOverdueModalOpen] = useState(false);
+  const [hasCheckedOverdueThisSession, setHasCheckedOverdueThisSession] = useState(false);
+
+  // ตรวจสอบและแสดง popup เตือนโทรหาเบอร์เจ้าหน้าที่ทุกครั้งที่เข้าเว็บ หากคำขอค้างเกิน 5 ชั่วโมง
+  useEffect(() => {
+    if (!hasCheckedOverdueThisSession && mySos && mySos.createdAt) {
+      const diffHours = (Date.now() - new Date(mySos.createdAt).getTime()) / (1000 * 60 * 60);
+      if (diffHours >= 5) {
+        setIsSosOverdueModalOpen(true);
+        setIsGuideOpen(false); // ปิดหน้าต่างคู่มือเพื่อให้เห็นเบอร์โทรฉุกเฉินทันที
+        setHasCheckedOverdueThisSession(true);
+      }
+    }
+  }, [mySos, hasCheckedOverdueThisSession]);
+
+  // หากคำขอได้รับการช่วยเหลือแล้ว หรือถูกลบออกจากระบบแล้ว ให้เคลียร์สถานะเครื่องและหยุดการแจ้งเตือนทันที
+  useEffect(() => {
+    if (mySosId && sosRequests.length > 0) {
+      const found = sosRequests.find(s => s.id === mySosId);
+      if (!found || found.status === 'resolved' || found.status === 'cancelled') {
+        try {
+          localStorage.removeItem('sakaeo_my_sos_id');
+          localStorage.removeItem('sakaeo_my_sos_data');
+        } catch (e) {}
+        setMySosId(null);
+        setIsSosOverdueModalOpen(false);
+      }
+    }
+  }, [mySosId, sosRequests]);
 
   const pendingSosCount = sosRequests.filter(s => s.status === 'pending').length;
 
@@ -703,6 +752,15 @@ export default function App() {
         isOpen={isGuideOpen}
         onClose={() => setIsGuideOpen(false)}
         initialMode={guideInitialMode}
+      />
+
+      {/* SOS Overdue Alert Modal (> 5 hours without resolution) */}
+      <SosOverdueModal
+        isOpen={isSosOverdueModalOpen}
+        onClose={() => setIsSosOverdueModalOpen(false)}
+        mySos={mySos}
+        onResolve={handleResolveMySos}
+        onOpenSosModal={() => setIsSosModalOpen(true)}
       />
 
     </div>
