@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   MapContainer, 
   TileLayer, 
@@ -40,7 +40,7 @@ import {
   HeartHandshake,
   Trash2
 } from 'lucide-react';
-import { createCustomMarkerIcon } from '../utils/mapIcons';
+import { createCustomMarkerIcon, getShortLocationLabel, getShortShelterLabel } from '../utils/mapIcons';
 import { getGoogleMapsDirectionsUrl, getGoogleMapsViewUrl, formatThaiDateTime, getCurrentLocation, SAKAEO_CENTER } from '../utils/geo';
 import { 
   getLineShareUrl, 
@@ -126,6 +126,7 @@ export default function FloodMap({
   // Mobile Separate Detail Popup Modal State
   const [mobileDetailItem, setMobileDetailItem] = useState(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const sosMarkerRefs = useRef({});
 
   useEffect(() => {
     const handleResize = () => {
@@ -783,7 +784,7 @@ export default function FloodMap({
           <Marker
             key={item.id}
             position={[item.lat, item.lng]}
-            icon={createCustomMarkerIcon(item.severity)}
+            icon={createCustomMarkerIcon(item.severity, { label: getShortLocationLabel(item) })}
             eventHandlers={{
               click: () => {
                 if (isMobile) {
@@ -832,11 +833,18 @@ export default function FloodMap({
                 <h4 className="font-bold text-base text-slate-900 leading-snug mb-1">
                   {item.title}
                 </h4>
-                <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-600 mb-2">
                   <span>📍 อ.{item.district} {item.subdistrict ? `ต.${item.subdistrict}` : ''}</span>
-                  <span className="text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                    รัศมีน้ำท่วม ~{item.radius || 400} ม.
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {item.reportCount > 1 && (
+                      <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 flex items-center gap-0.5" title="มีผู้ใช้ร่วมแจ้งยืนยันจุดนี้และระบบรวมเป็นจุดเดียวกัน">
+                        👥 ยืนยัน {item.reportCount} คน
+                      </span>
+                    )}
+                    <span className="text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                      รัศมี ~{item.radius || 400} ม.
+                    </span>
+                  </div>
                 </div>
 
                 {/* Water Level & Vehicles */}
@@ -960,58 +968,78 @@ export default function FloodMap({
         ))}
 
         {/* SOS Emergency Markers (เด่นกว่าทุกจุดด้วยไฟไซเรน และป้ายข้อมูลโชว์ขึ้นมาเลย) */}
-        {filteredSos.map(item => (
-          <Marker
-            key={item.id}
-            position={[item.lat, item.lng]}
-            icon={createCustomMarkerIcon('sos')}
-            zIndexOffset={3000}
-            eventHandlers={{
-              click: () => {
-                if (isMobile) {
-                  setMobileDetailItem({ type: 'sos', data: item });
-                }
+        {filteredSos.map(item => {
+          const handleSosCardClick = (e) => {
+            if (e) {
+              if (e.stopPropagation) e.stopPropagation();
+              if (e.originalEvent && e.originalEvent.stopPropagation) e.originalEvent.stopPropagation();
+            }
+            if (isMobile) {
+              setMobileDetailItem({ type: 'sos', data: item });
+            } else {
+              const markerInstance = sosMarkerRefs.current[item.id];
+              if (markerInstance) {
+                markerInstance.openPopup();
               }
-            }}
-          >
-            {/* ป้ายข้อมูลโชว์ขึ้นมาเลยโดยไม่ต้องกด (ปิดได้สำหรับคนอยากดูเฉพาะทาง) */}
-            {showSosDetails && !isMobile && (
-              <Tooltip 
-                permanent 
-                direction="top" 
-                offset={[0, -46]} 
-                className="sos-permanent-tooltip"
-              >
-                <div className="bg-slate-950/95 backdrop-blur-md text-white border-2 border-red-500 rounded-2xl p-2.5 shadow-2xl min-w-[190px] max-w-[240px] pointer-events-auto transform hover:scale-105 transition-transform">
-                  <div className="flex items-center justify-between gap-1 text-[11px] font-bold text-red-400">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                      🚨 ขอความช่วยเหลือด่วน
-                    </span>
-                    <span className="text-[9px] bg-red-900/80 text-white px-1.5 py-0.2 rounded font-mono">
-                      {item.status === 'in_progress' ? 'กู้ภัยกำลังช่วย' : 'รอช่วย'}
-                    </span>
-                  </div>
-                  
-                  <div className="font-heading font-bold text-white text-xs sm:text-sm truncate mt-1">
-                    {item.name}
-                  </div>
+            }
+          };
 
-                  {item.urgentNeeds && item.urgentNeeds.length > 0 && (
-                    <div className="text-[11px] text-amber-300 font-medium line-clamp-1 mt-0.5">
-                      ⚠️ {Array.isArray(item.urgentNeeds) ? item.urgentNeeds.join(', ') : item.urgentNeeds}
+          return (
+            <Marker
+              key={item.id}
+              ref={el => { if (el) sosMarkerRefs.current[item.id] = el; }}
+              position={[item.lat, item.lng]}
+              icon={createCustomMarkerIcon('sos')}
+              zIndexOffset={3000}
+              eventHandlers={{
+                click: handleSosCardClick
+              }}
+            >
+              {/* ป้ายข้อมูลโชว์ขึ้นมาเลยโดยไม่ต้องกด (ปิดได้สำหรับคนอยากดูเฉพาะทาง) */}
+              {showSosDetails && !isMobile && (
+                <Tooltip 
+                  permanent 
+                  direction="top" 
+                  offset={[0, -46]} 
+                  className="sos-permanent-tooltip cursor-pointer"
+                  eventHandlers={{
+                    click: handleSosCardClick
+                  }}
+                >
+                  <div 
+                    onClick={handleSosCardClick}
+                    className="bg-slate-950/95 backdrop-blur-md text-white border-2 border-red-500 rounded-2xl p-2.5 shadow-2xl min-w-[190px] max-w-[240px] pointer-events-auto transform hover:scale-105 transition-transform cursor-pointer"
+                    title="คลิกเพื่อดูรายละเอียดและนำทาง"
+                  >
+                    <div className="flex items-center justify-between gap-1 text-[11px] font-bold text-red-400">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                        🚨 ขอความช่วยเหลือด่วน
+                      </span>
+                      <span className="text-[9px] bg-red-900/80 text-white px-1.5 py-0.2 rounded font-mono">
+                        {item.status === 'in_progress' ? 'กู้ภัยกำลังช่วย' : 'รอช่วย'}
+                      </span>
                     </div>
-                  )}
+                    
+                    <div className="font-heading font-bold text-white text-xs sm:text-sm truncate mt-1">
+                      {item.name}
+                    </div>
 
-                  <div className="text-[10px] text-slate-300 flex items-center justify-between mt-1.5 pt-1.5 border-t border-slate-800">
-                    <span className="text-emerald-400 font-bold">📞 {item.phone}</span>
-                    <span className="text-rose-300 font-bold flex items-center gap-0.5">
-                      แตะดูนำทาง 🧭
-                    </span>
+                    {item.urgentNeeds && item.urgentNeeds.length > 0 && (
+                      <div className="text-[11px] text-amber-300 font-medium line-clamp-1 mt-0.5">
+                        ⚠️ {Array.isArray(item.urgentNeeds) ? item.urgentNeeds.join(', ') : item.urgentNeeds}
+                      </div>
+                    )}
+
+                    <div className="text-[10px] text-slate-300 flex items-center justify-between mt-1.5 pt-1.5 border-t border-slate-800">
+                      <span className="text-emerald-400 font-bold">📞 {item.phone}</span>
+                      <span className="text-rose-300 font-bold flex items-center gap-0.5 underline">
+                        แตะดูข้อมูล & นำทาง 🧭
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </Tooltip>
-            )}
+                </Tooltip>
+              )}
 
             {!isMobile && (
               <Popup className="custom-popup" maxWidth={330}>
@@ -1087,10 +1115,13 @@ export default function FloodMap({
 
                   <a
                     href={`tel:${item.phone}`}
-                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg shadow-sm text-xs no-underline transition-colors"
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl shadow-md text-xs no-underline transition-colors border border-emerald-400/40"
+                    style={{ color: '#ffffff', textDecoration: 'none' }}
                   >
-                    <Phone className="w-4 h-4" />
-                    <span>โทรติดต่อผู้ประสบภัย: {item.phone}</span>
+                    <Phone className="w-4 h-4 text-white shrink-0" style={{ color: '#ffffff' }} />
+                    <span className="font-bold text-white tracking-wide" style={{ color: '#ffffff' }}>
+                      โทรติดต่อผู้ประสบภัย: {item.phone}
+                    </span>
                   </a>
 
                   {/* LINE Share & Copy */}
@@ -1130,7 +1161,8 @@ export default function FloodMap({
             </Popup>
             )}
           </Marker>
-        ))}
+          );
+        })}
 
         {/* Rescue Center Markers (ศูนย์กู้ภัย & ฐานประสานงานช่วยเหลือ 24 ชม. - แยกต่างหากจากผู้ประสบภัย) */}
         {filteredRescueCenters.map(rc => (
@@ -1276,7 +1308,7 @@ export default function FloodMap({
           <Marker
             key={s.id}
             position={[s.lat, s.lng]}
-            icon={createCustomMarkerIcon('shelter')}
+            icon={createCustomMarkerIcon('shelter', { label: getShortShelterLabel(s) })}
             eventHandlers={{
               click: () => {
                 if (isMobile) {
@@ -1365,7 +1397,7 @@ export default function FloodMap({
           <Marker
             key={d.id}
             position={[d.lat, d.lng]}
-            icon={createCustomMarkerIcon('donation')}
+            icon={createCustomMarkerIcon('donation', { label: d.title ? (d.title.length > 15 ? d.title.substring(0, 14) + '…' : d.title) : 'จุดแจก/บริจาค' })}
             zIndexOffset={2200}
             eventHandlers={{
               click: () => {
@@ -1663,11 +1695,18 @@ export default function FloodMap({
                       <h3 className="font-heading font-bold text-lg text-white leading-snug">
                         {item.title}
                       </h3>
-                      <div className="flex items-center justify-between text-xs text-slate-400 mt-1">
+                      <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-400 mt-1">
                         <span>📍 อ.{item.district} {item.subdistrict ? `ต.${item.subdistrict}` : ''}</span>
-                        <span className="text-[11px] text-cyan-300 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded">
-                          รัศมี ~{item.radius || 400} ม.
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {item.reportCount > 1 && (
+                            <span className="text-[11px] text-amber-300 bg-amber-950/80 border border-amber-500/60 px-2 py-0.5 rounded-full font-bold">
+                              👥 ยืนยัน {item.reportCount} คน (รวมจุด)
+                            </span>
+                          )}
+                          <span className="text-[11px] text-cyan-300 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded">
+                            รัศมี ~{item.radius || 400} ม.
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -1834,10 +1873,13 @@ export default function FloodMap({
 
                       <a
                         href={`tel:${item.phone}`}
-                        className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl shadow text-xs no-underline active:scale-95"
+                        className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl shadow text-xs no-underline active:scale-95 border border-emerald-400/40"
+                        style={{ color: '#ffffff', textDecoration: 'none' }}
                       >
-                        <Phone className="w-4 h-4" />
-                        <span>โทรติดต่อผู้ประสบภัย: {item.phone}</span>
+                        <Phone className="w-4 h-4 text-white shrink-0" style={{ color: '#ffffff' }} />
+                        <span className="font-bold text-white tracking-wide" style={{ color: '#ffffff' }}>
+                          โทรติดต่อผู้ประสบภัย: {item.phone}
+                        </span>
                       </a>
 
                       <div className="grid grid-cols-2 gap-2">

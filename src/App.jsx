@@ -14,6 +14,8 @@ import FloodSafetyModal from './components/FloodSafetyModal';
 import FeedbackModal from './components/FeedbackModal';
 import AdminLoginModal from './components/AdminLoginModal';
 import AdminDashboardModal from './components/AdminDashboardModal';
+import AdminErrorBoundary from './components/AdminErrorBoundary';
+import UserGuideModal from './components/UserGuideModal';
 import WeatherAlertBanner from './components/WeatherAlertBanner';
 import MySosBanner from './components/MySosBanner';
 import { MapPin, Navigation, Home, LifeBuoy, PhoneCall } from 'lucide-react';
@@ -123,6 +125,10 @@ export default function App() {
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [selectedFloodToUpdate, setSelectedFloodToUpdate] = useState(null);
   const [reportInitialCoords, setReportInitialCoords] = useState(null); // พิกัดที่จะ pre-fill ใน ReportFloodModal
+
+  // Onboarding User Guide & Welcome Prompt
+  const [isGuideOpen, setIsGuideOpen] = useState(true); // Pops up on entry
+  const [guideInitialMode, setGuideInitialMode] = useState('prompt'); // 'prompt' on entrance, or 'guide' when clicked from navbar
 
   // Map coordinate picking mode
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
@@ -389,6 +395,7 @@ export default function App() {
         onOpenDonationModal={() => setIsDonationModalOpen(true)}
         onOpenSafetyModal={() => setIsSafetyModalOpen(true)}
         onOpenFeedbackModal={() => setIsFeedbackModalOpen(true)}
+        onOpenGuideModal={() => { setGuideInitialMode('guide'); setIsGuideOpen(true); }}
         pendingSosCount={pendingSosCount}
         hasSampleData={hasSampleData}
         onClearSampleData={handleClearSampleData}
@@ -549,7 +556,12 @@ export default function App() {
         isOpen={isReportModalOpen}
         onClose={() => { setIsReportModalOpen(false); setReportInitialCoords(null); }}
         onSubmitSuccess={(newFlood) => {
-          setFloods(prev => [newFlood, ...prev]);
+          if (newFlood.merged) {
+            setFloods(prev => prev.map(f => f.id === newFlood.id ? newFlood : f));
+          } else {
+            setFloods(prev => [newFlood, ...prev.filter(f => f.id !== newFlood.id)]);
+          }
+          fetchData();
           setActiveTab('map');
           setReportInitialCoords(null);
         }}
@@ -609,16 +621,25 @@ export default function App() {
       />
 
       {/* Admin Master Dashboard Modal */}
-      <AdminDashboardModal
-        isOpen={isAdminDashboardOpen}
-        onClose={() => setIsAdminDashboardOpen(false)}
-        floods={floods}
-        sosRequests={sosRequests}
-        donations={donations}
-        onRefreshAllData={fetchData}
-        onDeleteFlood={handleDeleteFlood}
-        onDeleteSos={handleDeleteSos}
-        onDeleteDonation={handleDeleteDonation}
+      <AdminErrorBoundary onClose={() => setIsAdminDashboardOpen(false)}>
+        <AdminDashboardModal
+          isOpen={isAdminDashboardOpen}
+          onClose={() => setIsAdminDashboardOpen(false)}
+          floods={floods}
+          sosRequests={sosRequests}
+          donations={donations}
+          onRefreshAllData={fetchData}
+          onDeleteFlood={handleDeleteFlood}
+          onDeleteSos={handleDeleteSos}
+          onDeleteDonation={handleDeleteDonation}
+        />
+      </AdminErrorBoundary>
+
+      {/* Onboarding User Guide & Welcome Prompt Modal */}
+      <UserGuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+        initialMode={guideInitialMode}
       />
 
     </div>

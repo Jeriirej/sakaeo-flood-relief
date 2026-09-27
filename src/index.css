@@ -1,7 +1,12 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Prompt', sans-serif;
+}
+
 :root {
-  font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 html, body, #root {
@@ -13,6 +18,7 @@ html, body, #root {
   overflow: hidden;
   max-width: 100vw;
   box-sizing: border-box;
+  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Safe area inset for modern mobile devices (e.g. iPhone notch / home indicator bar) */
@@ -21,7 +27,8 @@ html, body, #root {
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
-  font-family: 'Kanit', sans-serif;
+  font-family: 'Prompt', sans-serif;
+  font-weight: 600;
 }
 
 /* Ensure Leaflet tiles render smoothly */
@@ -30,7 +37,7 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   height: 100%;
   border-radius: 0.75rem;
   z-index: 10;
-  font-family: 'Sarabun', sans-serif;
+  font-family: 'Prompt', sans-serif;
 }
 
 /* Popup styling & Fix for link text turning dark blue */
@@ -41,6 +48,17 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .leaflet-popup-content a {
+  text-decoration: none !important;
+}
+
+/* FORCE ALL POPUP BUTTONS (GOOGLE MAPS, PHONE CALLS, LINE SHARE) TO HAVE PURE WHITE TEXT */
+.leaflet-popup-content a[href^="tel:"],
+.leaflet-popup-content a[href^="tel:"] *,
+.leaflet-popup-content a.bg-emerald-600,
+.leaflet-popup-content a.bg-emerald-600 *,
+.leaflet-popup-content a.bg-emerald-700,
+.leaflet-popup-content a.bg-emerald-700 * {
+  color: #ffffff !important;
   text-decoration: none !important;
 }
 
@@ -151,5 +169,26 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 .battery-saver .animate-pulse,
 .battery-saver .animate-bounce {
   animation: none !important;
+}
+
+/* Smooth Infinite Marquee for Top Emergency Disclaimer */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-scroll {
+  display: inline-flex;
+  white-space: nowrap;
+  will-change: transform;
+  animation: marquee-scroll 45s linear infinite;
+}
+
+.animate-marquee-scroll:hover {
+  animation-play-state: paused;
 }
 

@@ -213,6 +213,32 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', serverTime: new Date().toISOString() });
 });
 
+// Helper คำนวณระยะห่างระหว่างพิกัด GPS เป็นเมตร (Haversine Formula)
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // รัศมีโลกเป็นเมตร
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Helper คำนวณสัดส่วนการทับซ้อนของรัศมีวงกลม 2 วง (Circle Radial Overlap Ratio)
+function calculateCircleOverlapRatio(lat1, lng1, r1, lat2, lng2, r2) {
+  const d = calculateDistanceMeters(lat1, lng1, lat2, lng2);
+  if (d >= r1 + r2) return { overlapRatio: 0, distance: d }; // วงกลมไม่แตะกัน
+  if (d <= Math.abs(r1 - r2)) return { overlapRatio: 1.0, distance: d }; // วงหนึ่งอยู่ในอีกวง 100%
+
+  // ระยะทับซ้อนตามแนวเชื่อมโยงจุดศูนย์กลางเทียบกับรัศมีของวงที่เล็กกว่า
+  const overlapDistance = (r1 + r2) - d;
+  const minRadius = Math.min(r1, r2);
+  const overlapRatio = Math.min(1.0, overlapDistance / minRadius);
+  return { overlapRatio, distance: d };
+}
+
 // GET & POST Flood reports
 app.get('/api/floods', (req, res) => {
   const floods = readData(FLOODS_FILE, INITIAL_FLOODS);
@@ -227,15 +253,92 @@ app.post('/api/floods', (req, res) => {
   }
 
   const floods = readData(FLOODS_FILE, INITIAL_FLOODS);
+  const parsedLat = parseFloat(lat);
+  const parsedLng = parseFloat(lng);
   const parsedRadius = parseInt(radius) || (severity === 'danger' ? 600 : severity === 'warning' ? 350 : 250);
 
+  // ตรวจหาจุดน้ำท่วมเดิมที่มีการซ้อนทับของรัศมีวงกลมเกิน 45% (0.45)
+  let bestMatch = null;
+  let highestOverlap = 0;
+  let matchDistance = 0;
+
+  for (const existing of floods) {
+    if (existing.status === 'resolved') continue;
+    const existingRadius = existing.radius || (existing.severity === 'danger' ? 600 : existing.severity === 'warning' ? 350 : 250);
+    const { overlapRatio, distance } = calculateCircleOverlapRatio(
+      parsedLat, parsedLng, parsedRadius,
+      existing.lat, existing.lng, existingRadius
+    );
+
+    if (overlapRatio >= 0.45 && overlapRatio > highestOverlap) {
+      highestOverlap = overlapRatio;
+      bestMatch = existing;
+      matchDistance = distance;
+    }
+  }
+
+  // หากพบจุดเดิมที่ทับซ้อนเกิน 45% ให้ "รวมเข้าเป็นจุดเดียวกัน" และ "ขยายพื้นที่ใหญ่ขึ้น"
+  if (bestMatch) {
+    const oldRadius = bestMatch.radius || (bestMatch.severity === 'danger' ? 600 : bestMatch.severity === 'warning' ? 350 : 250);
+    
+    // คำนวณรัศมีที่ขยายใหญ่ขึ้น: ขยายครอบคลุมจุดใหม่ + บัฟเฟอร์เพิ่ม 15-20%
+    const bufferExpansion = Math.round(Math.max(60, Math.min(parsedRadius, oldRadius) * 0.18));
+    const spanCoverage = Math.round(matchDistance + parsedRadius * 0.6);
+    const newExpandedRadius = Math.min(2500, Math.max(oldRadius + bufferExpansion, spanCoverage));
+    bestMatch.radius = newExpandedRadius;
+
+    // เพิ่มจำนวนผู้ร่วมรายงานยืนยันจุดนี้
+    bestMatch.reportCount = (bestMatch.reportCount || 1) + 1;
+
+    // ขยับศูนย์กลางเฉลี่ยเล็กน้อยเพื่อครอบคลุมมวลน้ำที่ขยายตัว (90% จุดเดิม, 10% จุดใหม่)
+    bestMatch.lat = parseFloat((bestMatch.lat * 0.9 + parsedLat * 0.1).toFixed(6));
+    bestMatch.lng = parseFloat((bestMatch.lng * 0.9 + parsedLng * 0.1).toFixed(6));
+
+    // ปรับระดับความรุนแรงตามระดับที่อันตรายกว่า
+    const severityRank = { danger: 3, warning: 2, safe: 1 };
+    if ((severityRank[severity] || 0) > (severityRank[bestMatch.severity] || 0)) {
+      bestMatch.severity = severity;
+    }
+
+    // อัปเดตระดับน้ำหากจุดใหม่ระบุชัดเจนกว่า
+    if (waterLevel && waterLevel !== 'ไม่ระบุ') {
+      bestMatch.waterLevel = waterLevel;
+    }
+
+    // อัปเดตข้อมูลการสัญจร
+    if (passableFor && passableFor !== 'โปรดระมัดระวัง') {
+      bestMatch.passableFor = passableFor;
+    }
+
+    bestMatch.updatedAt = new Date().toISOString();
+
+    // บันทึกประวัติการยืนยันข้อมูลร่วมกัน
+    if (!bestMatch.updateHistory) bestMatch.updateHistory = [];
+    bestMatch.updateHistory.unshift({
+      timestamp: bestMatch.updatedAt,
+      reporterName: reporterName || 'พลเมืองดีร่วมรายงาน',
+      note: `ประชาชนร่วมยืนยันจุดนี้ (มีผู้แจ้งรวม ${bestMatch.reportCount} คน) • ขยายรัศมีเป็น ~${newExpandedRadius} ม. ทับซ้อนเดิม ${Math.round(highestOverlap * 100)}%${description ? ` • รายละเอียด: ${description}` : ''}`,
+      severity: bestMatch.severity,
+      waterLevel: bestMatch.waterLevel
+    });
+
+    writeData(FLOODS_FILE, floods);
+    return res.status(200).json({
+      ...bestMatch,
+      merged: true,
+      overlapPercent: Math.round(highestOverlap * 100),
+      message: `จุดนี้ซ้อนทับกับจุดเดิม ${Math.round(highestOverlap * 100)}% (เกิน 45%) ระบบได้รวมเป็นจุดเดียวกันและขยายรัศมีเป็น ${newExpandedRadius} เมตรเรียบร้อยแล้ว`
+    });
+  }
+
+  // กรณีเป็นจุดใหม่ที่ไม่ซ้อนทับเกิน 45% ให้สร้างจุดใหม่ตามปกติ
   const newFlood = {
     id: `flood-${Date.now()}`,
     title,
     district: district || 'ไม่ระบุอำเภอ',
     subdistrict: subdistrict || '',
-    lat: parseFloat(lat),
-    lng: parseFloat(lng),
+    lat: parsedLat,
+    lng: parsedLng,
     radius: parsedRadius,
     severity: severity || 'warning',
     waterLevel: waterLevel || 'ไม่ระบุ',
@@ -244,6 +347,7 @@ app.post('/api/floods', (req, res) => {
     description: description || '',
     reporterName: reporterName || 'พลเมืองดี',
     contactPhone: contactPhone || '',
+    reportCount: 1,
     isSample: false,
     updatedAt: new Date().toISOString(),
     status: 'active'
@@ -657,13 +761,13 @@ app.delete('/api/sos/:id', (req, res) => {
 app.get('/api/weather-alert', (req, res) => {
   res.json({
     warningLevel: "red", // red, yellow, green
-    headline: "ประกาศเตือนภัยน้ำท่วมฉับพลันและน้ำป่าไหลหลาก จ.สระแก้ว",
-    forecastPeriod: "24 ชั่วโมงข้างหน้า",
-    rainfallForecast: "มีฝนฟ้าคะนอง 70-80% ของพื้นที่ ฝนตกหนักถึงหนักมาก โดยเฉพาะ อ.เมือง, อรัญประเทศ, วัฒนานคร (ต.โนนหมากเค็ง/บ้านทับใหม่)",
+    headline: "เตือนภัยวิกฤต: อ่างเก็บน้ำพระสะทึงเกินความจุ 130.2% ระบายน้ำต่อเนื่อง กระทบ 7 อำเภอ",
+    forecastPeriod: "อัปเดตล่าสุด 27 ก.ย.",
+    rainfallForecast: "มวลน้ำหลากท่วม อ.เมือง (ต.สระขวัญ), อ.อรัญประเทศ (ตลาดโรงเกลือ), อ.เขาฉกรรจ์ และ อ.วังน้ำเย็น ปิดเส้นทางคมนาคมหลายสาย",
     riverStations: [
-      { name: "คลองพรหมโหด (อรัญประเทศ)", status: "วิกฤต (ล้นตลิ่ง 0.85 ม.)", trend: "ทรงตัว-เพิ่มขึ้นเล็กน้อย", color: "red" },
-      { name: "คลองพระสะทึง (เมืองสระแก้ว)", status: "วิกฤต (ล้นตลิ่ง 0.60 ม.)", trend: "ระบายน้ำต่อเนื่อง", color: "red" },
-      { name: "คลองพระปรง (เมืองสระแก้ว)", status: "เฝ้าระวัง (ระดับน้ำ 85%)", trend: "เฝ้าระวังน้ำหลาก", color: "yellow" }
+      { name: "อ่างเก็บน้ำพระสะทึง", status: "เกินความจุ 130.2% (ระบายต่อเนื่อง)", trend: "วิกฤตระบายน้ำ", color: "red" },
+      { name: "คลองพระสะทึง (เมืองสระแก้ว)", status: "วิกฤตล้นตลิ่ง 80-120 ซม. (อพยพ)", trend: "น้ำท่วมสูง", color: "red" },
+      { name: "คลองพรหมโหด (อรัญประเทศ)", status: "วิกฤต (ท่วมตลาดโรงเกลือ)", trend: "รถเล็กห้ามผ่าน", color: "red" }
     ],
     updatedAt: new Date().toISOString()
   });

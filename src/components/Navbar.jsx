@@ -13,6 +13,7 @@ import {
   Compass,
   HeartHandshake,
   MessageSquare,
+  BookOpen,
   Menu,
   X
 } from 'lucide-react';
@@ -26,6 +27,7 @@ export default function Navbar({
   onOpenDonationModal,
   onOpenSafetyModal,
   onOpenFeedbackModal,
+  onOpenGuideModal,
   pendingSosCount = 0, 
   hasSampleData = false, 
   onClearSampleData, 
@@ -56,17 +58,33 @@ export default function Navbar({
         </div>
       )}
 
-      {/* Top emergency announcement ticker */}
-      <div className="bg-rose-950/90 border-b border-rose-800/40 px-2.5 sm:px-3 py-0.5 text-[11px] sm:text-xs text-rose-200 flex items-center justify-between w-full overflow-hidden shrink-0">
-        <div className="flex items-center gap-1.5 overflow-hidden min-w-0">
+      {/* Top emergency announcement ticker (Infinite Loop Marquee) */}
+      <div className="bg-gradient-to-r from-red-950 via-rose-950 to-slate-950 border-b border-rose-800/60 py-1 text-[11px] sm:text-xs text-rose-200 flex items-center w-full overflow-hidden shrink-0 select-none shadow-inner">
+        {/* Fixed Left Badge: เตือนภัย */}
+        <div className="flex items-center gap-1.5 px-2.5 sm:px-3 bg-red-900 border-r border-red-700/60 z-10 shrink-0 font-bold text-white shadow-md">
           <span className="flex h-2 w-2 relative shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-300 opacity-90"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-400"></span>
           </span>
-          <span className="font-semibold text-rose-300 text-[11px] sm:text-xs shrink-0">เตือนภัยน้ำท่วม:</span>
-          <span className="truncate text-[11px] sm:text-xs">ระวังน้ำท่วมขังเส้นทางหลัก อ.อรัญประเทศ และ อ.เมืองสระแก้ว</span>
+          <span className="text-[11px] sm:text-xs tracking-wide">เตือนภัย & ข้อควรทราบ</span>
         </div>
-        <div className="hidden sm:flex items-center gap-2 font-mono text-rose-300/90 text-[11px] shrink-0 ml-2">
+
+        {/* Scrolling Marquee Container */}
+        <div className="flex-1 overflow-hidden relative min-w-0 flex items-center">
+          <div className="animate-marquee-scroll flex items-center gap-12 py-0.5 text-rose-100 text-[11px] sm:text-xs font-medium cursor-default">
+            <span>
+              📢 <strong>ข้อควรทราบ:</strong> เว็บไซต์นี้เป็นเพียงสื่อกลางข้อมูลสำหรับประกอบการตัดสินใจเดินทางและตรวจสอบพื้นที่น้ำท่วม • <strong>การขอความช่วยเหลือผ่านเว็บไม่สามารถติดต่อกู้ภัยให้ได้โดยตรง</strong> หากมีเหตุฉุกเฉิน <strong>โปรดโทรสายด่วน 1669 / 1784 หรือเบอร์กู้ภัยในเว็บก่อนเสมอ</strong> แล้วจึงค่อยลงขอความช่วยเหลือ • เว็บไซต์ช่วยให้ผู้มีความสามารถในพื้นที่เห็นพิกัดเพื่อเข้าช่วยเหลือได้ทันท่วงที • ร่วมด้วยช่วยกันคนละไม้คนละมือ เพื่อให้ทุกคนปลอดภัย
+            </span>
+            <span className="text-amber-400 font-bold">✦ ✦ ✦</span>
+            <span>
+              📢 <strong>ข้อควรทราบ:</strong> เว็บไซต์นี้เป็นเพียงสื่อกลางข้อมูลสำหรับประกอบการตัดสินใจเดินทางและตรวจสอบพื้นที่น้ำท่วม • <strong>การขอความช่วยเหลือผ่านเว็บไม่สามารถติดต่อกู้ภัยให้ได้โดยตรง</strong> หากมีเหตุฉุกเฉิน <strong>โปรดโทรสายด่วน 1669 / 1784 หรือเบอร์กู้ภัยในเว็บก่อนเสมอ</strong> แล้วจึงค่อยลงขอความช่วยเหลือ • เว็บไซต์ช่วยให้ผู้มีความสามารถในพื้นที่เห็นพิกัดเพื่อเข้าช่วยเหลือได้ทันท่วงที • ร่วมด้วยช่วยกันคนละไม้คนละมือ เพื่อให้ทุกคนปลอดภัย
+            </span>
+            <span className="text-amber-400 font-bold">✦ ✦ ✦</span>
+          </div>
+        </div>
+
+        {/* Fixed Right Hotline */}
+        <div className="hidden lg:flex items-center gap-2 font-mono text-white text-[11px] font-bold bg-red-900/90 px-3 py-0.5 border-l border-red-700/60 shrink-0 z-10">
           <span>สายด่วน 1669 / 1784</span>
         </div>
       </div>
@@ -218,6 +236,16 @@ export default function Navbar({
             >
               <MessageSquare className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span className="hidden xl:inline">ข้อเสนอแนะ</span>
+            </button>
+
+            {/* คู่มือใช้งานเว็บไซต์ (สำหรับทุกคนและผู้สูงอายุ) */}
+            <button
+              onClick={onOpenGuideModal}
+              className="flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 px-2.5 py-1.5 rounded-xl text-xs font-medium shadow-sm transition-all hover:border-sky-500 hover:text-sky-300"
+              title="คู่มือแนะนำวิธีใช้งานเว็บไซต์ (สำหรับทุกคนและผู้สูงอายุ)"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="hidden xl:inline">คู่มือใช้งาน</span>
             </button>
 
             {/* โหมดประหยัดแบตเตอรี่ */}
@@ -394,6 +422,20 @@ export default function Navbar({
               <div className="min-w-0">
                 <div className="font-bold text-cyan-300 truncate">ข้อเสนอแนะ</div>
                 <div className="text-[10px] text-slate-400 truncate">แจ้งปรับปรุงระบบ</div>
+              </div>
+            </button>
+
+            {/* 6. คู่มือแนะนำวิธีใช้งาน */}
+            <button
+              onClick={() => { setIsMobileMenuOpen(false); onOpenGuideModal(); }}
+              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-sky-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+            >
+              <div className="w-8 h-8 rounded-lg bg-sky-950 border border-sky-500/30 flex items-center justify-center shrink-0">
+                <BookOpen className="w-4 h-4 text-sky-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-bold text-sky-300 truncate">คู่มือใช้งาน</div>
+                <div className="text-[10px] text-slate-400 truncate">สอนใช้เว็บ 1 นาที</div>
               </div>
             </button>
 

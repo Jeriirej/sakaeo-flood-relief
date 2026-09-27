@@ -36,11 +36,15 @@ export default function AdminDashboardModal({
   onDeleteSos,
   onDeleteDonation
 }) {
-  const [activeTab, setActiveTab] = useState('feedbacks'); // feedbacks, points, security
+  const [activeTab, setActiveTab] = useState('feedbacks'); // feedbacks, points, security, backup
   const [pointsSubTab, setPointsSubTab] = useState('all'); // all, floods, sos, donations
   const [feedbacks, setFeedbacks] = useState([]);
   const [loadingFeedbacks, setLoadingFeedbacks] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+
+  // Export / Import Data State (ต้องประกาศก่อน if (!isOpen) return null ตามกฎ React Hooks)
+  const [importStatus, setImportStatus] = useState(null); // null | { type: 'loading'|'success'|'error', text: string }
+  const [isExporting, setIsExporting] = useState(false);
 
   // Security Settings State
   const [currentSecretKey, setCurrentSecretKey] = useState('');
@@ -48,6 +52,12 @@ export default function AdminDashboardModal({
   const [newPassword, setNewPassword] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState({ type: '', text: '' });
+
+  // Safe Array Wrappers ป้องกัน Props หรือ State เป็น null/undefined
+  const safeFloods = Array.isArray(floods) ? floods : [];
+  const safeSos = Array.isArray(sosRequests) ? sosRequests : [];
+  const safeDonations = Array.isArray(donations) ? donations : [];
+  const safeFeedbacks = Array.isArray(feedbacks) ? feedbacks : [];
 
   // Fetch Feedbacks & Current Secret Key
   const fetchFeedbacksAndConfig = async () => {
@@ -60,13 +70,13 @@ export default function AdminDashboardModal({
 
       if (fbRes && fbRes.ok) {
         const fbData = await fbRes.json();
-        setFeedbacks(fbData);
+        setFeedbacks(Array.isArray(fbData) ? fbData : []);
       }
 
       if (confRes && confRes.ok) {
         const confData = await confRes.json();
-        setCurrentSecretKey(confData.secretKey || '');
-        setNewSecretKey(confData.secretKey || '');
+        setCurrentSecretKey(confData?.secretKey || '');
+        setNewSecretKey(confData?.secretKey || '');
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
@@ -128,8 +138,9 @@ export default function AdminDashboardModal({
     e.preventDefault();
     setSettingsNotice({ type: '', text: '' });
 
-    if (newSecretKey.trim().length !== 48) {
-      setSettingsNotice({ type: 'error', text: `Secret Key ต้องยาว 48 ตัวอักษรพอดี (ปัจจุบัน: ${newSecretKey.trim().length} ตัวอักษร)` });
+    const trimmedKey = (newSecretKey || '').trim();
+    if (trimmedKey.length !== 48) {
+      setSettingsNotice({ type: 'error', text: `Secret Key ต้องยาว 48 ตัวอักษรพอดี (ปัจจุบัน: ${trimmedKey.length} ตัวอักษร)` });
       return;
     }
 
@@ -166,9 +177,6 @@ export default function AdminDashboardModal({
   };
 
   // ===== Export / Import Data =====
-  const [importStatus, setImportStatus] = useState(null); // null | { type: 'loading'|'success'|'error', text: string }
-  const [isExporting, setIsExporting] = useState(false);
-
   // Export ข้อมูลทั้งหมดเป็นไฟล์ JSON
   const handleExportData = async () => {
     setIsExporting(true);
@@ -268,7 +276,7 @@ export default function AdminDashboardModal({
     }
   };
 
-  const unreadFeedbackCount = feedbacks.filter(f => f.status !== 'read').length;
+  const unreadFeedbackCount = safeFeedbacks.filter(f => f?.status !== 'read').length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn select-none">
@@ -277,7 +285,7 @@ export default function AdminDashboardModal({
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-800 bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-900 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
               <ShieldAlert className="w-5 h-5" />
             </div>
             <div>
@@ -297,17 +305,17 @@ export default function AdminDashboardModal({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center border-b border-slate-800 bg-slate-950/80 px-4 sm:px-6 gap-2 shrink-0">
+        {/* Tab Navigation (Scrollable on mobile) */}
+        <div className="flex items-center border-b border-slate-800 bg-slate-950/80 px-2 sm:px-6 gap-1 sm:gap-2 shrink-0 overflow-x-auto whitespace-nowrap">
           <button
             onClick={() => setActiveTab('feedbacks')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all shrink-0 ${
               activeTab === 'feedbacks'
                 ? 'border-cyan-400 text-cyan-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -324,19 +332,19 @@ export default function AdminDashboardModal({
 
           <button
             onClick={() => setActiveTab('points')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all shrink-0 ${
               activeTab === 'points'
                 ? 'border-amber-400 text-amber-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <MapPin className="w-4 h-4" />
-            <span>จัดการและลบจุดบนแผนที่ ({floods.length + sosRequests.length + donations.length})</span>
+            <span>จัดการและลบจุดบนแผนที่ ({safeFloods.length + safeSos.length + safeDonations.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('security')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all shrink-0 ${
               activeTab === 'security'
                 ? 'border-emerald-400 text-emerald-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -348,7 +356,7 @@ export default function AdminDashboardModal({
 
           <button
             onClick={() => setActiveTab('backup')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition-all shrink-0 ${
               activeTab === 'backup'
                 ? 'border-violet-400 text-violet-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -383,32 +391,32 @@ export default function AdminDashboardModal({
                 </button>
               </div>
 
-              {feedbacks.length === 0 ? (
+              {safeFeedbacks.length === 0 ? (
                 <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-xs sm:text-sm">
                   💬 ยังไม่มีข้อเสนอแนะส่งเข้ามาในขณะนี้
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {feedbacks.map(item => (
+                  {safeFeedbacks.map(item => (
                     <div 
                       key={item.id}
                       className={`p-4 rounded-2xl border transition-all ${
                         item.status === 'read'
-                          ? 'bg-slate-850/60 border-slate-800 text-slate-400'
+                          ? 'bg-slate-800/40 border-slate-800 text-slate-400'
                           : 'bg-slate-800/90 border-cyan-500/40 shadow-lg text-slate-100'
                       }`}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
                           <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                            item.category.includes('แก้ไข') 
+                            (item?.category || '').includes('แก้ไข') 
                               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                               : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
                           }`}>
-                            {item.category}
+                            {item?.category || 'ข้อเสนอแนะ'}
                           </span>
                           <span className="text-[11px] text-slate-400">
-                            {formatThaiDateTime(item.createdAt)}
+                            {formatThaiDateTime(item?.createdAt)}
                           </span>
                         </div>
 
@@ -479,7 +487,7 @@ export default function AdminDashboardModal({
                       pointsSubTab === 'floods' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    น้ำท่วม ({floods.length})
+                    น้ำท่วม ({safeFloods.length})
                   </button>
                   <button
                     onClick={() => setPointsSubTab('sos')}
@@ -487,7 +495,7 @@ export default function AdminDashboardModal({
                       pointsSubTab === 'sos' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    SOS ({sosRequests.length})
+                    SOS ({safeSos.length})
                   </button>
                   <button
                     onClick={() => setPointsSubTab('donations')}
@@ -495,7 +503,7 @@ export default function AdminDashboardModal({
                       pointsSubTab === 'donations' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    จุดบริจาค ({donations.length})
+                    จุดบริจาค ({safeDonations.length})
                   </button>
                 </div>
               </div>
@@ -503,7 +511,7 @@ export default function AdminDashboardModal({
               {/* Items List */}
               <div className="space-y-2.5">
                 {/* FLOODS */}
-                {(pointsSubTab === 'all' || pointsSubTab === 'floods') && floods.map(item => (
+                {(pointsSubTab === 'all' || pointsSubTab === 'floods') && safeFloods.map(item => (
                   <div key={item.id} className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
@@ -517,7 +525,7 @@ export default function AdminDashboardModal({
                         <span className="font-bold text-white text-xs sm:text-sm truncate">{item.title}</span>
                       </div>
                       <div className="text-slate-400 text-[11px] truncate">
-                        อ.{item.district} • ระดับน้ำ: {item.waterLevel} • รายงาน: {item.reporterName}
+                        {item.district ? `อ.${item.district}` : ''} • ระดับน้ำ: {item.waterLevel || 'ไม่ระบุ'} • รายงาน: {item.reporterName || 'ไม่ระบุ'}
                       </div>
                     </div>
 
@@ -536,7 +544,7 @@ export default function AdminDashboardModal({
                 ))}
 
                 {/* SOS */}
-                {(pointsSubTab === 'all' || pointsSubTab === 'sos') && sosRequests.map(item => (
+                {(pointsSubTab === 'all' || pointsSubTab === 'sos') && safeSos.map(item => (
                   <div key={item.id} className="bg-slate-800/80 border border-rose-600/40 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
@@ -547,7 +555,7 @@ export default function AdminDashboardModal({
                         <span className="text-yellow-300 font-mono text-xs">({item.phone})</span>
                       </div>
                       <div className="text-slate-300 text-[11px] truncate">
-                        📍 อ.{item.district} {item.landmark ? `(${item.landmark})` : ''} • ต้องการ: {item.urgentNeeds}
+                        📍 {item.district ? `อ.${item.district}` : (item.address ? item.address.slice(0, 30) : 'พิกัด GPS')} {item.landmark ? `(${item.landmark})` : ''} • ต้องการ: {Array.isArray(item.urgentNeeds) ? item.urgentNeeds.join(', ') : (item.urgentNeeds || '-')}
                       </div>
                     </div>
 
@@ -566,7 +574,7 @@ export default function AdminDashboardModal({
                 ))}
 
                 {/* DONATIONS */}
-                {(pointsSubTab === 'all' || pointsSubTab === 'donations') && donations.map(item => (
+                {(pointsSubTab === 'all' || pointsSubTab === 'donations') && safeDonations.map(item => (
                   <div key={item.id} className="bg-slate-800/80 border border-orange-500/40 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
@@ -576,7 +584,7 @@ export default function AdminDashboardModal({
                         <span className="font-bold text-white text-xs sm:text-sm truncate">{item.title}</span>
                       </div>
                       <div className="text-slate-300 text-[11px] truncate">
-                        📞 {item.contactPhone} • ผู้จัดตั้ง: {item.organizerName} • อ.{item.district}
+                        📞 {item.contactPhone || '-'} • ผู้จัดตั้ง: {item.organizerName || '-'} • {item.district ? `อ.${item.district}` : ''}
                       </div>
                     </div>
 
@@ -594,7 +602,7 @@ export default function AdminDashboardModal({
                   </div>
                 ))}
 
-                {floods.length === 0 && sosRequests.length === 0 && donations.length === 0 && (
+                {safeFloods.length === 0 && safeSos.length === 0 && safeDonations.length === 0 && (
                   <div className="p-8 text-center text-slate-400 text-xs">
                     ไม่มีรายการจุดใดๆ ในขณะนี้
                   </div>
@@ -636,11 +644,11 @@ export default function AdminDashboardModal({
                       <span>Secret Search Key (ต้องยาว 48 ตัวอักษรพอดี):</span>
                     </label>
                     <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
-                      newSecretKey.trim().length === 48 
+                      (newSecretKey || '').trim().length === 48 
                         ? 'bg-emerald-950 border border-emerald-500 text-emerald-300' 
                         : 'bg-rose-950 border border-rose-500 text-rose-300'
                     }`}>
-                      {newSecretKey.trim().length} / 48 ตัว
+                      {(newSecretKey || '').trim().length} / 48 ตัว
                     </span>
                   </div>
 
