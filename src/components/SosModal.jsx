@@ -42,8 +42,6 @@ export default function SosModal({ isOpen, onClose, onSubmitSuccess, onPickLocat
   const [locationStatus, setLocationStatus] = useState(null); // 'success', 'error', null
   const [errorMessage, setErrorMessage] = useState('');
 
-  if (!isOpen) return null;
-
   // Handle GPS Auto-detect
   const handleAutoGPS = async () => {
     setLocating(true);
@@ -175,6 +173,8 @@ export default function SosModal({ isOpen, onClose, onSubmitSuccess, onPickLocat
       setSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">

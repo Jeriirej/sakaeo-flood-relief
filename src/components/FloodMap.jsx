@@ -38,7 +38,8 @@ import {
   Search,
   Utensils,
   HeartHandshake,
-  Trash2
+  Trash2,
+  MapPin
 } from 'lucide-react';
 import { createCustomMarkerIcon, getShortLocationLabel, getShortShelterLabel } from '../utils/mapIcons';
 import { getGoogleMapsDirectionsUrl, getGoogleMapsViewUrl, formatThaiDateTime, getCurrentLocation, SAKAEO_CENTER } from '../utils/geo';
