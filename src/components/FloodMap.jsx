@@ -129,6 +129,27 @@ export default function FloodMap({
   const [locating, setLocating] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
 
+  // Map Tile Mode: 'standard' (OSM) | 'esri-satellite' (ESRI World Imagery + Labels) | 'esri-topo' (ESRI Topographic)
+  const [mapTileMode, setMapTileMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sakaeo_map_tile_mode');
+      if (saved === 'google-satellite' || saved === 'esri-satellite') return 'esri-satellite';
+      if (saved === 'google-roadmap' || saved === 'esri-topo') return 'esri-topo';
+      return saved || 'standard';
+    } catch {
+      return 'standard';
+    }
+  });
+  const [showLayerMenu, setShowLayerMenu] = useState(false);
+
+  const handleSelectMapTile = (mode) => {
+    setMapTileMode(mode);
+    setShowLayerMenu(false);
+    try {
+      localStorage.setItem('sakaeo_map_tile_mode', mode);
+    } catch {}
+  };
+
   // Admin Relocate Marker Confirmation State
   const [pendingRelocationCoords, setPendingRelocationCoords] = useState(null); // { id, title, oldLat, oldLng, newLat, newLng }
   const [savingRelocation, setSavingRelocation] = useState(false);
@@ -642,8 +663,105 @@ export default function FloodMap({
         </div>
       </div>
 
-      {/* Floating Action Button: GPS Locate Me */}
-      <div className="absolute bottom-6 right-4 z-20 flex flex-col gap-2 pointer-events-auto">
+      {/* Floating Action Buttons */}
+      <div className="absolute bottom-6 right-4 z-20 flex flex-col gap-2 pointer-events-auto items-end">
+        
+        {/* Layer Selector Popup Menu */}
+        {showLayerMenu && (
+          <div className="bg-slate-900/98 backdrop-blur-md border border-slate-700/80 rounded-2xl shadow-2xl p-2 mb-1 w-60 flex flex-col gap-1 text-xs animate-fadeIn text-slate-200 font-sans z-30">
+            <div className="px-2 py-1 text-[11px] font-bold text-slate-400 border-b border-slate-800 flex items-center justify-between">
+              <span>เลือกรูปแบบแผนที่</span>
+              <button 
+                type="button"
+                onClick={() => setShowLayerMenu(false)}
+                className="text-slate-400 hover:text-white p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* 1. แผนที่ถนนมาตรฐาน OSM */}
+            <button
+              type="button"
+              onClick={() => handleSelectMapTile('standard')}
+              className={`flex items-center justify-between p-2 rounded-xl transition-all text-left ${
+                mapTileMode === 'standard' 
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold' 
+                  : 'hover:bg-slate-800 text-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🗺️</span>
+                <div>
+                  <div className="text-xs">แผนที่ถนนปกติ</div>
+                  <div className="text-[10px] text-slate-400 font-normal">สว่าง คลีน ประหยัดเน็ต</div>
+                </div>
+              </div>
+              {mapTileMode === 'standard' && <Check className="w-4 h-4 text-rose-400 shrink-0" />}
+            </button>
+
+            {/* 2. ภาพถ่ายดาวเทียม ESRI ArcGIS (ถูกต้องตามลิขสิทธิ์ + ซ้อนชื่อถนน) */}
+            <button
+              type="button"
+              onClick={() => handleSelectMapTile('esri-satellite')}
+              className={`flex items-center justify-between p-2 rounded-xl transition-all text-left ${
+                mapTileMode === 'esri-satellite' 
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' 
+                  : 'hover:bg-slate-800 text-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🛰️</span>
+                <div>
+                  <div className="text-xs">ดาวเทียม ESRI (คมชัด)</div>
+                  <div className="text-[10px] text-slate-400 font-normal">เห็นหลังคาบ้าน ชุมชน & ลำน้ำจริง</div>
+                </div>
+              </div>
+              {mapTileMode === 'esri-satellite' && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+            </button>
+
+            {/* 3. แผนที่ภูมิประเทศ ESRI Topographic */}
+            <button
+              type="button"
+              onClick={() => handleSelectMapTile('esri-topo')}
+              className={`flex items-center justify-between p-2 rounded-xl transition-all text-left ${
+                mapTileMode === 'esri-topo' 
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' 
+                  : 'hover:bg-slate-800 text-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">⛰️</span>
+                <div>
+                  <div className="text-xs">ภูมิประเทศ & ความสูง</div>
+                  <div className="text-[10px] text-slate-400 font-normal">แนวภูเขา ลุ่มน้ำ ทิศทางน้ำหลาก</div>
+                </div>
+              </div>
+              {mapTileMode === 'esri-topo' && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+            </button>
+          </div>
+        )}
+
+        {/* ปุ่มสลับชั้นแผนที่ (Layer Switcher) */}
+        <button
+          type="button"
+          onClick={() => setShowLayerMenu(prev => !prev)}
+          className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center shadow-2xl transition-all transform active:scale-90 border ${
+            mapTileMode === 'esri-satellite'
+              ? 'bg-cyan-950 text-cyan-300 border-cyan-500/60 shadow-cyan-950/60'
+              : mapTileMode === 'esri-topo'
+              ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60'
+              : 'bg-slate-900/95 hover:bg-slate-800 text-slate-300 border-slate-700'
+          }`}
+          title="เปลี่ยนรูปแบบแผนที่ (ถนนปกติ / ภาพถ่ายดาวเทียม ESRI / ภูมิประเทศ)"
+        >
+          <Layers className="w-5 h-5 text-cyan-400" />
+          <span className="text-[9px] font-bold mt-0.5 leading-none">
+            {mapTileMode === 'esri-satellite' ? 'ดาวเทียม' : mapTileMode === 'esri-topo' ? 'ภูมิประเทศ' : 'แผนที่'}
+          </span>
+        </button>
+
+        {/* GPS Locate Me */}
         <button
           onClick={handleLocateMe}
           disabled={locating}
@@ -669,6 +787,8 @@ export default function FloodMap({
       <MapContainer
         center={mapCenter}
         zoom={mapZoom}
+        maxZoom={20}
+        minZoom={7}
         scrollWheelZoom={true}
         className="w-full h-full flex-1 min-h-0"
       >
@@ -679,11 +799,45 @@ export default function FloodMap({
           isSelectingLocation={isSelectingLocation} 
         />
 
-        {/* High performance OpenStreetMap CartoDB Dark/Voyager tiles */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        {/* Dynamic Map Tile Layer (OSM / ESRI World Imagery + Labels / ESRI Topo) */}
+        {mapTileMode === 'esri-satellite' && (
+          <>
+            <TileLayer
+              key="esri-imagery"
+              attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+              maxNativeZoom={18}
+              maxZoom={20}
+            />
+            <TileLayer
+              key="esri-labels"
+              attribution='&copy; Esri &mdash; Boundaries & Places'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+              maxNativeZoom={18}
+              maxZoom={20}
+            />
+          </>
+        )}
+
+        {mapTileMode === 'esri-topo' && (
+          <TileLayer
+            key="esri-topo"
+            attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+            maxNativeZoom={18}
+            maxZoom={20}
+          />
+        )}
+
+        {mapTileMode === 'standard' && (
+          <TileLayer
+            key="standard-osm"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxNativeZoom={19}
+            maxZoom={20}
+          />
+        )}
 
         {/* My Current Location Marker with Share GPS Buttons */}
         {myLocation && (
