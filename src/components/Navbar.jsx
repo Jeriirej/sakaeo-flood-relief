@@ -112,7 +112,7 @@ export default function Navbar({
                 </span>
               </div>
               <p className="text-[10px] text-slate-400 -mt-0.5 hidden sm:block truncate">
-                ระบบรายงานเส้นทางน้ำท่วม & ศูนย์ขอความช่วยเหลือฉุกเฉิน
+                ระบบรวบรวมข้อมูล
               </p>
             </div>
           </div>
