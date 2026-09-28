@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Navbar from './components/Navbar';
 import FloodMap from './components/FloodMap';
 import RescueDashboard from './components/RescueDashboard';
@@ -17,6 +17,7 @@ import AdminDashboardModal from './components/AdminDashboardModal';
 import AdminErrorBoundary from './components/AdminErrorBoundary';
 import UserGuideModal from './components/UserGuideModal';
 import WeatherAlertBanner from './components/WeatherAlertBanner';
+import PwaInstallBanner from './components/PwaInstallBanner';
 import MySosBanner from './components/MySosBanner';
 import SosOverdueModal from './components/SosOverdueModal';
 import { MapPin, Navigation, Home, LifeBuoy, PhoneCall } from 'lucide-react';
@@ -145,60 +146,117 @@ export default function App() {
   const [locationPickerCallback, setLocationPickerCallback] = useState(null);
   const [tempPickerCoord, setTempPickerCoord] = useState(null);
 
-  // Fetch all live data with offline cache sync
-  const fetchData = useCallback(async () => {
-    setIsRefreshing(true);
+  // Cache ref to prevent re-parsing and re-rendering when server data is unchanged
+  const dataCacheRef = useRef({
+    floods: localStorage.getItem('sakaeo_floods_cache') || '',
+    sos: localStorage.getItem('sakaeo_sos_cache') || '',
+    shelters: localStorage.getItem('sakaeo_shelters_cache') || '',
+    rescueCenters: localStorage.getItem('sakaeo_rescue_centers_cache') || '',
+    donations: localStorage.getItem('sakaeo_donations_cache') || '',
+    weather: localStorage.getItem('sakaeo_weather_cache') || '',
+  });
+
+  // Toggle battery-saver class on root HTML document for zero-cost CSS optimizations
+  useEffect(() => {
+    if (batterySaver) {
+      document.documentElement.classList.add('battery-saver');
+    } else {
+      document.documentElement.classList.remove('battery-saver');
+    }
+  }, [batterySaver]);
+
+  // Fetch all live data with zero-render diffing & offline cache sync
+  const fetchData = useCallback(async (isManual = false) => {
+    if (isManual) {
+      setIsRefreshing(true);
+    }
     try {
       const [floodsRes, sosRes, sheltersRes, weatherRes, centersRes, donationsRes] = await Promise.all([
-        fetch('/api/floods').catch(e => null),
-        fetch('/api/sos').catch(e => null),
-        fetch('/api/shelters').catch(e => null),
-        fetch('/api/weather-alert').catch(e => null),
-        fetch('/api/rescue-centers').catch(e => null),
-        fetch('/api/donations').catch(e => null)
+        fetch('/api/floods').catch(() => null),
+        fetch('/api/sos').catch(() => null),
+        fetch('/api/shelters').catch(() => null),
+        fetch('/api/weather-alert').catch(() => null),
+        fetch('/api/rescue-centers').catch(() => null),
+        fetch('/api/donations').catch(() => null)
       ]);
 
       let hadSuccess = false;
 
       if (floodsRes && floodsRes.ok) {
-        const floodsData = await floodsRes.json();
-        setFloods(floodsData);
-        localStorage.setItem('sakaeo_floods_cache', JSON.stringify(floodsData));
+        const text = await floodsRes.text();
+        if (text !== dataCacheRef.current.floods) {
+          dataCacheRef.current.floods = text;
+          try {
+            const data = JSON.parse(text);
+            setFloods(data);
+            localStorage.setItem('sakaeo_floods_cache', text);
+          } catch {}
+        }
         hadSuccess = true;
       }
 
       if (sosRes && sosRes.ok) {
-        const sosData = await sosRes.json();
-        setSosRequests(sosData);
-        localStorage.setItem('sakaeo_sos_cache', JSON.stringify(sosData));
+        const text = await sosRes.text();
+        if (text !== dataCacheRef.current.sos) {
+          dataCacheRef.current.sos = text;
+          try {
+            const data = JSON.parse(text);
+            setSosRequests(data);
+            localStorage.setItem('sakaeo_sos_cache', text);
+          } catch {}
+        }
         hadSuccess = true;
       }
 
       if (sheltersRes && sheltersRes.ok) {
-        const sheltersData = await sheltersRes.json();
-        setShelters(sheltersData);
-        localStorage.setItem('sakaeo_shelters_cache', JSON.stringify(sheltersData));
+        const text = await sheltersRes.text();
+        if (text !== dataCacheRef.current.shelters) {
+          dataCacheRef.current.shelters = text;
+          try {
+            const data = JSON.parse(text);
+            setShelters(data);
+            localStorage.setItem('sakaeo_shelters_cache', text);
+          } catch {}
+        }
         hadSuccess = true;
       }
 
       if (centersRes && centersRes.ok) {
-        const centersData = await centersRes.json();
-        setRescueCenters(centersData);
-        localStorage.setItem('sakaeo_rescue_centers_cache', JSON.stringify(centersData));
+        const text = await centersRes.text();
+        if (text !== dataCacheRef.current.rescueCenters) {
+          dataCacheRef.current.rescueCenters = text;
+          try {
+            const data = JSON.parse(text);
+            setRescueCenters(data);
+            localStorage.setItem('sakaeo_rescue_centers_cache', text);
+          } catch {}
+        }
         hadSuccess = true;
       }
 
       if (donationsRes && donationsRes.ok) {
-        const donationsData = await donationsRes.json();
-        setDonations(donationsData);
-        localStorage.setItem('sakaeo_donations_cache', JSON.stringify(donationsData));
+        const text = await donationsRes.text();
+        if (text !== dataCacheRef.current.donations) {
+          dataCacheRef.current.donations = text;
+          try {
+            const data = JSON.parse(text);
+            setDonations(data);
+            localStorage.setItem('sakaeo_donations_cache', text);
+          } catch {}
+        }
         hadSuccess = true;
       }
 
       if (weatherRes && weatherRes.ok) {
-        const weatherData = await weatherRes.json();
-        setWeatherAlert(weatherData);
-        localStorage.setItem('sakaeo_weather_cache', JSON.stringify(weatherData));
+        const text = await weatherRes.text();
+        if (text !== dataCacheRef.current.weather) {
+          dataCacheRef.current.weather = text;
+          try {
+            const data = JSON.parse(text);
+            setWeatherAlert(data);
+            localStorage.setItem('sakaeo_weather_cache', text);
+          } catch {}
+        }
         hadSuccess = true;
       }
 
@@ -208,16 +266,47 @@ export default function App() {
       setIsOfflineMode(true);
     } finally {
       setLoading(false);
-      setIsRefreshing(false);
+      if (isManual) {
+        setIsRefreshing(false);
+      }
     }
   }, []);
 
+  // Smart polling scheduler: pauses when backgrounded/screen locked, adaptive frequency for mobile/battery saver
   useEffect(() => {
-    fetchData();
-    // Auto-refresh data every 20 seconds for real-time updates
-    const interval = setInterval(fetchData, 20000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    fetchData(false);
+
+    let timerId = null;
+    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 768;
+    const intervalMs = batterySaver ? 60000 : (isMobileDevice ? 40000 : 25000);
+
+    const scheduleNext = () => {
+      if (document.hidden) return; // Completely pause polling when screen is locked or tab is hidden
+      timerId = setTimeout(async () => {
+        await fetchData(false);
+        scheduleNext();
+      }, intervalMs);
+    };
+
+    scheduleNext();
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Tab resumed from background: immediately fetch fresh data
+        fetchData(false);
+        clearTimeout(timerId);
+        scheduleNext();
+      } else {
+        clearTimeout(timerId);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearTimeout(timerId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchData, batterySaver]);
 
   // เปิด ReportFloodModal พร้อมพิกัดที่ตั้งค่าล่วงหน้า (ถูกเรียกจาก FloodMap เมื่อผู้ใช้วางพิกัดในช่องค้นหา)
   const handleOpenReportModalWithCoords = (coords) => {
@@ -500,11 +589,14 @@ export default function App() {
         pendingSosCount={pendingSosCount}
         hasSampleData={hasSampleData}
         onClearSampleData={handleClearSampleData}
-        onRefresh={fetchData}
+        onRefresh={() => fetchData(true)}
         isRefreshing={isRefreshing}
         batterySaver={batterySaver}
         onToggleBatterySaver={toggleBatterySaver}
       />
+
+      {/* PWA Mobile App Install Prompt Banner */}
+      <PwaInstallBanner />
 
       {/* Weather & River Gauges Live Ticker */}
       <WeatherAlertBanner weatherAlert={weatherAlert} />
@@ -529,6 +621,7 @@ export default function App() {
             donations={donations}
             shelters={shelters}
             isAdmin={isAdminLoggedIn}
+            batterySaver={batterySaver}
             relocatingFlood={relocatingFlood}
             onStartRelocateFlood={handleStartRelocateFlood}
             onCancelRelocate={handleCancelRelocateFlood}

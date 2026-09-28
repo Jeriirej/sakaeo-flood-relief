@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e11d48"/>
+      <stop offset="50%" stop-color="#be123c"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- App Rounded Background -->
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+
+  <!-- Shield Shape -->
+  <g filter="url(#shadow)">
+    <path d="M96 28 L148 48 C148 100 126 138 96 156 C66 138 44 100 44 48 Z" fill="#ffffff" fill-opacity="0.95"/>
+    <path d="M96 34 L142 52 C142 98 122 132 96 148 C70 132 50 98 50 52 Z" fill="#0f172a"/>
+  </g>
+
+  <!-- Water Waves Inside Shield -->
+  <path d="M60 102 C 72 94, 84 110, 96 102 C 108 94, 120 110, 132 102 C 132 122, 118 138, 96 148 C 74 138, 60 122, 60 102 Z" fill="url(#water)"/>
+  <path d="M64 116 C 74 110, 86 122, 96 116 C 106 110, 118 122, 128 116 C 124 126, 112 138, 96 145 C 80 138, 68 126, 64 116 Z" fill="#0284c7" opacity="0.8"/>
+
+  <!-- Warning Exclamation -->
+  <g fill="#f43f5e" filter="url(#shadow)">
+    <rect x="91" y="56" width="10" height="30" rx="5"/>
+    <circle cx="96" cy="94" r="5"/>
+  </g>
+</svg>

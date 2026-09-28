@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   MapContainer, 
   TileLayer, 
@@ -39,7 +39,14 @@ import {
   Utensils,
   HeartHandshake,
   Trash2,
-  MapPin
+  MapPin,
+  CloudRain,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  ChevronDown,
+  SlidersHorizontal
 } from 'lucide-react';
 import { createCustomMarkerIcon, getShortLocationLabel, getShortShelterLabel } from '../utils/mapIcons';
 import { getGoogleMapsDirectionsUrl, getGoogleMapsViewUrl, formatThaiDateTime, getCurrentLocation, SAKAEO_CENTER } from '../utils/geo';
@@ -101,6 +108,7 @@ export default function FloodMap({
   donations = [],
   shelters = [],
   isAdmin = false,
+  batterySaver = false,
   relocatingFlood = null,
   onStartRelocateFlood,
   onCancelRelocate,
@@ -150,6 +158,69 @@ export default function FloodMap({
     } catch {}
   };
 
+  // Live Rain Radar Layer (RainViewer API - TMD Radar) with Multi-Frame Animation Player
+  const [showRadarLayer, setShowRadarLayer] = useState(() => {
+    try {
+      return localStorage.getItem('sakaeo_show_radar') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [radarHost, setRadarHost] = useState('https://tilecache.rainviewer.com');
+  const [radarFrames, setRadarFrames] = useState([]);
+  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
+  const [radarLoading, setRadarLoading] = useState(false);
+
+  // Fetch latest RainViewer radar frames
+  const fetchRadarData = useCallback(async () => {
+    try {
+      setRadarLoading(true);
+      const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+      if (!res.ok) throw new Error('Failed to fetch radar metadata');
+      const data = await res.json();
+      if (data?.radar?.past?.length > 0) {
+        if (data.host) setRadarHost(data.host);
+        setRadarFrames(data.radar.past);
+        // Default to latest frame
+        setCurrentFrameIndex(data.radar.past.length - 1);
+      }
+    } catch (err) {
+      console.warn('Could not load RainViewer radar:', err);
+    } finally {
+      setRadarLoading(false);
+    }
+  }, []);
+
+  // Fetch when enabled and periodic 5-min refresh (paused in battery saver mode or when tab is hidden)
+  useEffect(() => {
+    if (showRadarLayer && !batterySaver) {
+      fetchRadarData();
+      const interval = setInterval(() => {
+        if (!document.hidden) {
+          fetchRadarData();
+        }
+      }, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [showRadarLayer, fetchRadarData, batterySaver]);
+
+  const toggleRadar = () => {
+    setShowRadarLayer(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('sakaeo_show_radar', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Current radar frame info
+  const currentRadarFrame = radarFrames[currentFrameIndex] || null;
+  const radarTileUrl = currentRadarFrame ? `${radarHost}${currentRadarFrame.path}/256/{z}/{x}/{y}/2/1_1.png` : null;
+  const radarTime = currentRadarFrame ? new Date(currentRadarFrame.time * 1000).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.' : null;
+  const isLatestFrame = radarFrames.length > 0 && currentFrameIndex === radarFrames.length - 1;
+  const minutesAgo = radarFrames.length > 0 ? (radarFrames.length - 1 - currentFrameIndex) * 10 : 0;
+
   // Admin Relocate Marker Confirmation State
   const [pendingRelocationCoords, setPendingRelocationCoords] = useState(null); // { id, title, oldLat, oldLng, newLat, newLng }
   const [savingRelocation, setSavingRelocation] = useState(false);
@@ -165,6 +236,7 @@ export default function FloodMap({
   // Mobile Separate Detail Popup Modal State
   const [mobileDetailItem, setMobileDetailItem] = useState(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [mobileRadarExpanded, setMobileRadarExpanded] = useState(false);
   const sosMarkerRefs = useRef({});
 
   useEffect(() => {
@@ -218,7 +290,7 @@ export default function FloodMap({
     { name: 'ทางหลวง 317 (จันทบุรี สู่สระแก้ว ผ่านวังน้ำเย็น)', district: 'วังน้ำเย็น', lat: 13.5850, lng: 102.1200, category: 'เส้นทางปลอดภัย' }
   ];
 
-  const searchResults = (() => {
+  const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     // ตรวจจับพิกัด — ถ้า parse ได้ให้แสดง item พิเศษด้านบนก่อน
     const coord = parseCoordinate(searchQuery);
@@ -239,7 +311,7 @@ export default function FloodMap({
       ...shelters.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.district?.includes(searchQuery)).map(s => ({ name: s.name, district: s.district, lat: s.lat, lng: s.lng, category: 'ศูนย์พักพิง' }))
     ];
     return [...coordItem, ...normalResults].slice(0, 7);
-  })();
+  }, [searchQuery, floods, donations, rescueCenters, shelters]);
 
   const handleSelectSearchResult = (target) => {
     setMapCenter([target.lat, target.lng]);
@@ -336,39 +408,49 @@ export default function FloodMap({
   };
 
   // Filter Floods
-  const filteredFloods = floods.filter(item => {
-    if (filterType === 'sos' || filterType === 'rescueCenter' || filterType === 'donation' || filterType === 'shelter') return false;
-    if (filterType !== 'all' && item.severity !== filterType) return false;
-    if (districtFilter !== 'all' && item.district !== districtFilter) return false;
-    return true;
-  });
+  const filteredFloods = useMemo(() => {
+    return floods.filter(item => {
+      if (filterType === 'sos' || filterType === 'rescueCenter' || filterType === 'donation' || filterType === 'shelter') return false;
+      if (filterType !== 'all' && item.severity !== filterType) return false;
+      if (districtFilter !== 'all' && item.district !== districtFilter) return false;
+      return true;
+    });
+  }, [floods, filterType, districtFilter]);
 
   // Filter SOS (ผู้ประสบภัยจริง ที่รอความช่วยเหลือ)
-  const filteredSos = sosRequests.filter(item => {
-    if (filterType !== 'all' && filterType !== 'sos') return false;
-    return item.status !== 'resolved';
-  });
+  const filteredSos = useMemo(() => {
+    return sosRequests.filter(item => {
+      if (filterType !== 'all' && filterType !== 'sos') return false;
+      return item.status !== 'resolved';
+    });
+  }, [sosRequests, filterType]);
 
   // Filter Rescue Centers (ศูนย์กู้ภัย & ฐานปฏิบัติการช่วยเหลือ แยกต่างหากจากผู้ประสบภัย)
-  const filteredRescueCenters = rescueCenters.filter(item => {
-    if (filterType !== 'all' && filterType !== 'rescueCenter') return false;
-    if (districtFilter !== 'all' && item.district !== districtFilter) return false;
-    return true;
-  });
+  const filteredRescueCenters = useMemo(() => {
+    return rescueCenters.filter(item => {
+      if (filterType !== 'all' && filterType !== 'rescueCenter') return false;
+      if (districtFilter !== 'all' && item.district !== districtFilter) return false;
+      return true;
+    });
+  }, [rescueCenters, filterType, districtFilter]);
 
   // Filter Donations & Relief Kitchens (จุดแจกอาหารและรับบริจาค)
-  const filteredDonations = donations.filter(item => {
-    if (filterType !== 'all' && filterType !== 'donation') return false;
-    if (districtFilter !== 'all' && item.district !== districtFilter) return false;
-    return true;
-  });
+  const filteredDonations = useMemo(() => {
+    return donations.filter(item => {
+      if (filterType !== 'all' && filterType !== 'donation') return false;
+      if (districtFilter !== 'all' && item.district !== districtFilter) return false;
+      return true;
+    });
+  }, [donations, filterType, districtFilter]);
 
   // Filter Shelters
-  const filteredShelters = shelters.filter(item => {
-    if (filterType !== 'all' && filterType !== 'shelter') return false;
-    if (districtFilter !== 'all' && item.district !== districtFilter) return false;
-    return true;
-  });
+  const filteredShelters = useMemo(() => {
+    return shelters.filter(item => {
+      if (filterType !== 'all' && filterType !== 'shelter') return false;
+      if (districtFilter !== 'all' && item.district !== districtFilter) return false;
+      return true;
+    });
+  }, [shelters, filterType, districtFilter]);
 
   // Unique Districts for filter
   const districts = ['ทั้งหมด', 'อรัญประเทศ', 'เมืองสระแก้ว', 'วังน้ำเย็น', 'วัฒนานคร', 'ตาพระยา', 'เขาฉกรรจ์', 'คลองหาด', 'วังสมบูรณ์', 'โคกสูง'];
@@ -543,36 +625,42 @@ export default function FloodMap({
           </button>
         </div>
 
-        {/* District Selector & Quick Actions (ตั้งจุดบริจาค / คู่มือเอาชีวิตรอด) */}
+        {/* หมวดหมู่จุดและสถานที่ (ศูนย์กู้ภัย, ศูนย์พักพิง, SOS, จุดแจกอาหาร, จุดน้ำท่วม) */}
         <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto">
           <select
-            value={districtFilter}
-            onChange={(e) => setDistrictFilter(e.target.value)}
-            className="bg-slate-900/90 backdrop-blur-md text-slate-200 border border-slate-700/80 rounded-xl px-2.5 py-1 text-xs shadow-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+            value={filterType}
+            onChange={(e) => {
+              setFilterType(e.target.value);
+              setDistrictFilter('all');
+            }}
+            className="bg-slate-900/95 backdrop-blur-md text-slate-100 border border-slate-700/80 hover:border-slate-500 rounded-xl px-2.5 py-1 text-xs font-bold shadow-lg focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
           >
-            {districts.map(d => (
-              <option key={d} value={d === 'ทั้งหมด' ? 'all' : d}>
-                {d === 'ทั้งหมด' ? '📍 ทุกอำเภอ' : `อ.${d}`}
-              </option>
-            ))}
+            <option value="all">📍 แสดงหมุดทุกประเภท ({floods.length + sosRequests.length + rescueCenters.length + shelters.length + donations.length})</option>
+            <option value="rescueCenter">🛡️ ศูนย์กู้ภัย & ฐานช่วยเหลือ ({rescueCenters.length})</option>
+            <option value="shelter">🏠 ศูนย์พักพิงชั่วคราว ({shelters.length})</option>
+            <option value="sos">🚨 ขอความช่วยเหลือฉุกเฉิน SOS ({sosRequests.filter(s => s.status !== 'resolved').length})</option>
+            <option value="donation">🍲 จุดแจกอาหาร / รับบริจาค ({donations.length})</option>
+            <option value="danger">🔴 ทางขาด / ห้ามผ่าน ({floods.filter(f => f.severity === 'danger').length})</option>
+            <option value="warning">🟡 เฝ้าระวัง / น้ำเอ่อท่วม ({floods.filter(f => f.severity === 'warning').length})</option>
+            <option value="safe">🟢 เส้นทางเลี่ยงสัญจรได้ ({floods.filter(f => f.severity === 'safe').length})</option>
           </select>
 
-          {/* ปุ่มเพิ่มจุดบริจาค/เปิดโรงครัว */}
+          {/* ปุ่มเพิ่มจุดบริจาค/เปิดโรงครัว (Desktop Only - Mobile มีใน Drawer เมนูแล้ว) */}
           <button
             type="button"
             onClick={onOpenDonationModal}
-            className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold px-2.5 py-1 rounded-xl text-xs shadow-lg flex items-center gap-1 border border-amber-400/40 transition-transform active:scale-95"
+            className="hidden sm:flex bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold px-2.5 py-1 rounded-xl text-xs shadow-lg items-center gap-1 border border-amber-400/40 transition-transform active:scale-95"
             title="ผู้มีจิตศรัทธาสามารถตั้งจุดแจกอาหารหรือเปิดรับบริจาคเองได้"
           >
             <HeartHandshake className="w-3.5 h-3.5 text-amber-200" />
             <span>➕ ตั้งจุดแจก/บริจาค</span>
           </button>
 
-          {/* ปุ่มคู่มือเอาชีวิตรอด */}
+          {/* ปุ่มคู่มือเอาชีวิตรอด (Desktop Only - Mobile มีใน Drawer เมนูแล้ว) */}
           <button
             type="button"
             onClick={onOpenSafetyModal}
-            className="bg-red-950/90 hover:bg-red-900 text-red-200 font-bold px-2.5 py-1 rounded-xl text-xs shadow-lg flex items-center gap-1 border border-red-600/50 transition-colors"
+            className="hidden sm:flex bg-red-950/90 hover:bg-red-900 text-red-200 font-bold px-2.5 py-1 rounded-xl text-xs shadow-lg items-center gap-1 border border-red-600/50 transition-colors"
             title="ข้อควรระวังสำคัญ: อันตรายจากไฟดูด, สัตว์มีพิษ, โรคฉี่หนู"
           >
             <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
@@ -593,11 +681,11 @@ export default function FloodMap({
             <span>รัศมีน้ำท่วม: {showRadius ? 'เปิด' : 'ปิด'}</span>
           </button>
 
-          {/* Toggle SOS Information (เปิด/ปิดป้ายข้อมูลผู้ขอความช่วยเหลือ เพื่อดูเฉพาะเส้นทางได้) */}
+          {/* Toggle SOS Information (Desktop Only) */}
           {filteredSos.length > 0 && (
             <button
               onClick={() => setShowSosDetails(!showSosDetails)}
-              className={`px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-lg border ${
+              className={`hidden sm:flex px-2.5 py-1 rounded-xl text-xs font-semibold items-center gap-1.5 transition-all shadow-lg border ${
                 showSosDetails
                   ? 'bg-red-600 text-white border-red-400 shadow-red-950/50'
                   : 'bg-slate-900/90 text-slate-400 border-slate-700 hover:text-slate-200'
@@ -608,6 +696,60 @@ export default function FloodMap({
               <span>ข้อมูล SOS: {showSosDetails ? 'เปิด' : 'ปิด (ดูแค่ทาง)'}</span>
             </button>
           )}
+        </div>
+
+        {/* 🚨 Mobile SOS Alert Banner (In-Flow, Never Overlaps!) */}
+        {isMobile && showSosDetails && filteredSos.length > 0 && (
+          <div className="bg-slate-950/95 backdrop-blur-md border border-red-500/80 rounded-2xl px-2.5 py-1.5 shadow-2xl flex items-center justify-between gap-1.5 text-xs text-slate-100 pointer-events-auto animate-fadeIn w-full">
+            <button
+              type="button"
+              onClick={() => setMobileDetailItem({ type: 'sos', data: filteredSos[0] })}
+              className="flex items-center gap-1.5 min-w-0 text-left flex-1"
+            >
+              <span className="flex h-2 w-2 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-90"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              <span className="font-bold text-red-400 text-[11px] shrink-0">
+                🚨 ขอความช่วยเหลือ ({filteredSos.length} จุด)
+              </span>
+              <span className="text-white text-[11px] font-medium truncate">
+                • {filteredSos[0].name}
+              </span>
+            </button>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <a
+                href={`tel:${filteredSos[0].phone}`}
+                className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow"
+                title="โทรหาผู้ขอความช่วยเหลือ"
+              >
+                <Phone className="w-3 h-3" />
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMapCenter([filteredSos[0].lat, filteredSos[0].lng]);
+                  setMapZoom(16);
+                }}
+                className="w-6 h-6 rounded-full bg-slate-800 text-rose-300 hover:text-white flex items-center justify-center border border-slate-700"
+                title="ซูมไปจุดนี้"
+              >
+                <Crosshair className="w-3 h-3" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSosDetails(false)}
+                className="w-5 h-5 rounded-full text-slate-400 hover:text-white flex items-center justify-center"
+                title="ซ่อน"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )}
 
           {filterType === 'donation' && filteredDonations.length === 0 && (
             <div className="bg-orange-950/95 border border-orange-500/70 text-orange-200 text-xs px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-2 animate-fadeIn">
@@ -661,7 +803,6 @@ export default function FloodMap({
             </div>
           )}
         </div>
-      </div>
 
       {/* Floating Action Buttons */}
       <div className="absolute bottom-6 right-4 z-20 flex flex-col gap-2 pointer-events-auto items-end">
@@ -742,6 +883,23 @@ export default function FloodMap({
           </div>
         )}
 
+        {/* ปุ่มเปิด/ปิด เรดาร์ฝนสด TMD / RainViewer */}
+        <button
+          type="button"
+          onClick={toggleRadar}
+          className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center shadow-2xl transition-all transform active:scale-90 border ${
+            showRadarLayer
+              ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-950/70 ring-2 ring-emerald-400/80'
+              : 'bg-slate-900/95 hover:bg-slate-800 text-slate-300 border-slate-700'
+          }`}
+          title="เปิด/ปิด เรดาร์ฝนสด (RainViewer / กรมอุตุฯ TMD)"
+        >
+          <CloudRain className={`w-5 h-5 ${showRadarLayer ? 'text-white animate-bounce' : 'text-emerald-400'}`} />
+          <span className="text-[9px] font-bold mt-0.5 leading-none">
+            {showRadarLayer ? 'เรดาร์ ON' : 'เรดาร์ฝน'}
+          </span>
+        </button>
+
         {/* ปุ่มสลับชั้นแผนที่ (Layer Switcher) */}
         <button
           type="button"
@@ -783,13 +941,319 @@ export default function FloodMap({
         </button>
       </div>
 
-      {/* Leaflet Map */}
+      {/* Live Rain Radar Time Period Selector Widget */}
+      {showRadarLayer && (
+        isMobile ? (
+          /* 📱 MOBILE VIEW: Compact Docked Bottom Bar (ไม่บังแผนที่ ไม่ชนปุ่มขวา) */
+          <div className="absolute bottom-3 left-3 right-20 z-20 pointer-events-auto animate-fadeIn">
+            <div className="bg-slate-900/98 backdrop-blur-md border border-emerald-500/80 rounded-2xl shadow-2xl p-2 text-white flex flex-col gap-1.5">
+              
+              {/* Drawer Content (Presets & Slider - Shows only when expanded) */}
+              {mobileRadarExpanded && (
+                <div className="flex flex-col gap-2 pb-2 border-b border-slate-800 animate-fadeIn">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-300 flex items-center gap-1.5">
+                      <CloudRain className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>เลือกดูช่วงเวลาเมฆฝน TMD</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMobileRadarExpanded(false)}
+                      className="text-[10px] text-slate-300 hover:text-white px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700"
+                    >
+                      ย่อแถบ ⏷
+                    </button>
+                  </div>
+
+                  {/* 4 Quick Preset Buttons */}
+                  <div className="grid grid-cols-4 gap-1">
+                    {[
+                      { label: 'ล่าสุด', index: radarFrames.length - 1 },
+                      { label: '-30 นาที', index: Math.max(0, radarFrames.length - 1 - 3) },
+                      { label: '-1 ชม.', index: Math.max(0, radarFrames.length - 1 - 6) },
+                      { label: '-2 ชม.', index: 0 },
+                    ].map((preset) => {
+                      const isActive = currentFrameIndex === preset.index;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setCurrentFrameIndex(preset.index)}
+                          className={`py-1 rounded-lg text-[10px] font-bold text-center transition-all ${
+                            isActive
+                              ? 'bg-emerald-600 text-white shadow ring-1 ring-emerald-400'
+                              : 'bg-slate-800 text-slate-300'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Range Slider */}
+                  {radarFrames.length > 1 && (
+                    <div className="flex flex-col gap-0.5">
+                      <input
+                        type="range"
+                        min={0}
+                        max={radarFrames.length - 1}
+                        value={currentFrameIndex}
+                        onChange={(e) => setCurrentFrameIndex(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                      />
+                      <div className="flex justify-between text-[8px] text-slate-400 font-mono">
+                        <span>ย้อนหลัง 2 ชม.</span>
+                        <span>ล่าสุด</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Main Compact Row (Always visible - Ultra sleek) */}
+              <div className="flex items-center justify-between gap-1.5">
+                {/* Time Indicator Button (Tap to toggle expanded slider) */}
+                <button
+                  type="button"
+                  onClick={() => setMobileRadarExpanded(prev => !prev)}
+                  className="flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-800 px-2 py-1 rounded-xl border border-slate-700/80 min-w-0 shrink text-left"
+                >
+                  <span className="flex h-2 w-2 relative shrink-0">
+                    <span className={`absolute inline-flex h-full w-full rounded-full ${isLatestFrame ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isLatestFrame ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                  </span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-mono text-[11px] font-bold text-amber-300 leading-tight">
+                      {radarTime || '--:--'}
+                    </span>
+                    <span className="text-[8px] text-emerald-300 leading-tight truncate">
+                      {isLatestFrame ? 'ล่าสุด (สด)' : `-${minutesAgo}น.`}
+                    </span>
+                  </div>
+                </button>
+
+                {/* Quick Step Buttons & Jump Latest */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={currentFrameIndex === 0}
+                    onClick={() => setCurrentFrameIndex(prev => Math.max(0, prev - 1))}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 border border-slate-700 text-xs"
+                    title="ย้อนหลัง 10 นาที"
+                  >
+                    <SkipBack className="w-3 h-3" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentFrameIndex(radarFrames.length - 1)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      isLatestFrame
+                        ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
+                        : 'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}
+                  >
+                    ล่าสุด
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={currentFrameIndex === radarFrames.length - 1}
+                    onClick={() => setCurrentFrameIndex(prev => Math.min(radarFrames.length - 1, prev + 1))}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 border border-slate-700 text-xs"
+                    title="เดินหน้า 10 นาที"
+                  >
+                    <SkipForward className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* Controls: Expand toggle, Refresh & Close */}
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setMobileRadarExpanded(prev => !prev)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700"
+                    title={mobileRadarExpanded ? 'ย่อแถบ' : 'ขยายแถบปรับเวลา'}
+                  >
+                    {mobileRadarExpanded ? <ChevronDown className="w-3 h-3" /> : <SlidersHorizontal className="w-3 h-3" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={toggleRadar}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white"
+                    title="ปิดเรดาร์"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* 🖥️ DESKTOP VIEW: Floating Top-Right Card (Unchanged) */
+          <div className="absolute top-18 right-16 sm:right-20 z-20 pointer-events-auto bg-slate-900/98 backdrop-blur-md border border-emerald-500/70 rounded-2xl p-3 text-xs text-white shadow-2xl flex flex-col gap-2.5 animate-fadeIn w-72 sm:w-80">
+            {/* Top Header Row */}
+            <div className="flex items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-2.5 w-2.5 relative shrink-0">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-bold text-emerald-300 text-xs truncate">เรดาร์กลุ่มฝนสด TMD</span>
+                  <span className="text-[10px] text-slate-400">เลือกดูภาพตามช่วงเวลา</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={fetchRadarData}
+                  disabled={radarLoading}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="ดึงข้อมูลเรดาร์ล่าสุดจากสถานี"
+                >
+                  <span className={`inline-block ${radarLoading ? 'animate-spin' : ''}`}>⟳</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleRadar}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="ปิดเรดาร์ฝน"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Current Frame Status Badge */}
+            <div className="bg-slate-800/90 rounded-xl p-2.5 border border-slate-700/80 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div>
+                  <div className="text-[10px] text-slate-400">เวลาตรวจวัดเรดาร์</div>
+                  <div className="font-mono text-sm font-bold text-amber-300">
+                    {radarTime || '--:--'}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                {isLatestFrame ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-950 text-emerald-300 px-2.5 py-1 rounded-full font-bold border border-emerald-500/50 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    ล่าสุด (สด)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] bg-amber-950 text-amber-300 px-2.5 py-1 rounded-full font-bold border border-amber-500/40 font-mono shadow-sm">
+                    {minutesAgo >= 60
+                      ? `ย้อนหลัง ${Math.floor(minutesAgo / 60)} ชม.${minutesAgo % 60 > 0 ? ` ${minutesAgo % 60}น.` : ''}`
+                      : `ย้อนหลัง ${minutesAgo} นาที`}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Preset Time Slot Pills (ดูตามช่วงเวลา) */}
+            {radarFrames.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-slate-300 font-medium flex items-center justify-between">
+                  <span>เลือกช่วงเวลาด่วน:</span>
+                  <span className="text-[9px] text-slate-400">แตะเพื่อเปลี่ยนภาพ</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { label: 'ล่าสุด', index: radarFrames.length - 1 },
+                    { label: '-30 นาที', index: Math.max(0, radarFrames.length - 1 - 3) },
+                    { label: '-1 ชม.', index: Math.max(0, radarFrames.length - 1 - 6) },
+                    { label: '-2 ชม.', index: 0 },
+                  ].map((preset) => {
+                    const isActive = currentFrameIndex === preset.index;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setCurrentFrameIndex(preset.index)}
+                        className={`py-1.5 px-1 rounded-xl text-[11px] font-bold text-center transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/60 ring-2 ring-emerald-400'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Time Slider & Fine Stepper */}
+            {radarFrames.length > 1 && (
+              <div className="flex flex-col gap-1.5 pt-1.5 border-t border-slate-800">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>เลื่อนแถบเวลาละเอียด:</span>
+                  <span className="font-mono text-slate-300">
+                    เฟรมที่ {currentFrameIndex + 1}/{radarFrames.length}
+                  </span>
+                </div>
+
+                <input
+                  type="range"
+                  min={0}
+                  max={radarFrames.length - 1}
+                  value={currentFrameIndex}
+                  onChange={(e) => setCurrentFrameIndex(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                />
+
+                <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono">
+                  <span>ย้อนหลัง 2 ชม.</span>
+                  <span>ล่าสุด</span>
+                </div>
+
+                {/* Stepper buttons (ย้อน 10 นาที / เดินหน้า 10 นาที) */}
+                <div className="grid grid-cols-2 gap-1.5 mt-1">
+                  <button
+                    type="button"
+                    disabled={currentFrameIndex === 0}
+                    onClick={() => setCurrentFrameIndex(prev => Math.max(0, prev - 1))}
+                    className="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 border border-slate-700 text-center transition-colors flex items-center justify-center gap-1.5 font-medium text-[11px] cursor-pointer"
+                    title="ย้อนหลังไป 10 นาที"
+                  >
+                    <SkipBack className="w-3.5 h-3.5 text-slate-400" />
+                    <span>◀ ย้อน 10 น.</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={currentFrameIndex === radarFrames.length - 1}
+                    onClick={() => setCurrentFrameIndex(prev => Math.min(radarFrames.length - 1, prev + 1))}
+                    className="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 border border-slate-700 text-center transition-colors flex items-center justify-center gap-1.5 font-medium text-[11px] cursor-pointer"
+                    title="เดินหน้าไป 10 นาที"
+                  >
+                    <span>ถัดไป 10 น. ▶</span>
+                    <SkipForward className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      )}
+
+      {/* Leaflet Map (ล็อคขอบเขตเฉพาะประเทศไทย ป้องกันคนเลื่อนหลุดออกนอกประเทศ พร้อม preferCanvas เพื่อความลื่นไหลสูงสุด) */}
       <MapContainer
         center={mapCenter}
         zoom={mapZoom}
         maxZoom={20}
-        minZoom={7}
+        minZoom={6}
+        maxBounds={[[5.2, 96.8], [20.8, 106.0]]}
+        maxBoundsViscosity={1.0}
         scrollWheelZoom={true}
+        preferCanvas={true}
         className="w-full h-full flex-1 min-h-0"
       >
         <MapResizeHandler />
@@ -808,6 +1272,9 @@ export default function FloodMap({
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
               maxNativeZoom={18}
               maxZoom={20}
+              keepBuffer={4}
+              updateWhenIdle={true}
+              updateWhenZooming={false}
             />
             <TileLayer
               key="esri-labels"
@@ -815,6 +1282,9 @@ export default function FloodMap({
               url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
               maxNativeZoom={18}
               maxZoom={20}
+              keepBuffer={4}
+              updateWhenIdle={true}
+              updateWhenZooming={false}
             />
           </>
         )}
@@ -826,6 +1296,9 @@ export default function FloodMap({
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
             maxNativeZoom={18}
             maxZoom={20}
+            keepBuffer={4}
+            updateWhenIdle={true}
+            updateWhenZooming={false}
           />
         )}
 
@@ -836,6 +1309,25 @@ export default function FloodMap({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxNativeZoom={19}
             maxZoom={20}
+            keepBuffer={4}
+            updateWhenIdle={true}
+            updateWhenZooming={false}
+          />
+        )}
+
+        {/* Live RainViewer Weather Radar Layer (TMD / Global Radar) */}
+        {showRadarLayer && radarTileUrl && (
+          <TileLayer
+            key={radarTileUrl}
+            attribution='&copy; <a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer">RainViewer</a> (TMD Radar)'
+            url={radarTileUrl}
+            opacity={0.68}
+            zIndex={500}
+            maxNativeZoom={7}
+            maxZoom={20}
+            keepBuffer={3}
+            updateWhenIdle={true}
+            updateWhenZooming={false}
           />
         )}
 
@@ -1492,9 +1984,10 @@ export default function FloodMap({
                   {rc.secondaryPhone && (
                     <a
                       href={`tel:${rc.secondaryPhone}`}
-                      className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold py-1.5 px-2 rounded-lg text-xs no-underline border border-slate-300"
+                      className="w-full flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-3 rounded-xl text-xs no-underline border border-slate-700 shadow-sm transition-all transform active:scale-95"
+                      style={{ color: '#ffffff', textDecoration: 'none' }}
                     >
-                      <Phone className="w-3.5 h-3.5 text-blue-600" />
+                      <Phone className="w-3.5 h-3.5 text-amber-400" />
                       <span>สายด่วนสำรอง: {rc.secondaryPhone}</span>
                     </a>
                   )}
@@ -1766,76 +2259,76 @@ export default function FloodMap({
 
       </MapContainer>
 
-      {/* Floating SOS Quick Alert Card on Map (มีข้อมูลขึ้นมาโชว์เลย แต่กดยกเลิก/ปิดได้สำหรับคนที่อยากดูเส้นทางอย่างเดียว) */}
-      {showSosDetails && filteredSos.length > 0 && (
+      {/* Floating SOS Quick Alert Card on Map (Desktop Only - Mobile is in top flow) */}
+      {!isMobile && showSosDetails && filteredSos.length > 0 && (
         <div className="absolute bottom-4 left-3 right-16 sm:right-auto z-20 max-w-sm pointer-events-auto animate-fadeIn">
-          <div className="bg-slate-950/95 backdrop-blur-md border-2 border-red-500/80 rounded-2xl p-3 shadow-2xl text-slate-100">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <span className="flex h-2.5 w-2.5 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-90"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                </span>
-                <span className="font-heading font-bold text-xs text-red-300">
-                  จุดขอความช่วยเหลือฉุกเฉิน ({filteredSos.length} จุด)
-                </span>
-              </div>
-              <button
-                onClick={() => setShowSosDetails(false)}
-                className="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700/80 transition-colors flex items-center gap-1"
-                title="ซ่อนข้อมูล SOS เพื่อดูเฉพาะเส้นทางน้ำท่วม"
-              >
-                <X className="w-3 h-3 text-rose-400" />
-                <span>ซ่อน (ดูแค่ทาง)</span>
-              </button>
-            </div>
-
-            <div className="text-xs space-y-0.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-white truncate text-sm">{filteredSos[0].name}</span>
-                <a
-                  href={`tel:${filteredSos[0].phone}`}
-                  className="text-emerald-400 font-bold text-xs flex items-center gap-1 hover:underline ml-2 shrink-0 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-600/40"
+            <div className="bg-slate-950/95 backdrop-blur-md border-2 border-red-500/80 rounded-2xl p-3 shadow-2xl text-slate-100">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-2.5 w-2.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-90"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                  </span>
+                  <span className="font-heading font-bold text-xs text-red-300">
+                    จุดขอความช่วยเหลือฉุกเฉิน ({filteredSos.length} จุด)
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowSosDetails(false)}
+                  className="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700/80 transition-colors flex items-center gap-1"
+                  title="ซ่อนข้อมูล SOS เพื่อดูเฉพาะเส้นทางน้ำท่วม"
                 >
-                  <Phone className="w-3 h-3" />
-                  {filteredSos[0].phone}
+                  <X className="w-3 h-3 text-rose-400" />
+                  <span>ซ่อน (ดูแค่ทาง)</span>
+                </button>
+              </div>
+
+              <div className="text-xs space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white truncate text-sm">{filteredSos[0].name}</span>
+                  <a
+                    href={`tel:${filteredSos[0].phone}`}
+                    className="text-emerald-400 font-bold text-xs flex items-center gap-1 hover:underline ml-2 shrink-0 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-600/40"
+                  >
+                    <Phone className="w-3 h-3" />
+                    {filteredSos[0].phone}
+                  </a>
+                </div>
+                <div className="text-xs text-amber-300 font-medium truncate">
+                  ต้องการ: {Array.isArray(filteredSos[0].urgentNeeds) ? filteredSos[0].urgentNeeds.join(', ') : filteredSos[0].urgentNeeds}
+                </div>
+                {filteredSos[0].address && (
+                  <div className="text-[11px] text-slate-400 truncate">
+                    พิกัด/ที่อยู่: {filteredSos[0].address}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-slate-800">
+                <button
+                  onClick={() => {
+                    setMapCenter([filteredSos[0].lat, filteredSos[0].lng]);
+                    setMapZoom(16);
+                  }}
+                  className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center justify-center gap-1 border border-slate-700 transition-colors"
+                >
+                  <Crosshair className="w-3.5 h-3.5 text-rose-400" />
+                  <span>ซูมไปจุดนี้</span>
+                </button>
+                <a
+                  href={getGoogleMapsDirectionsUrl(filteredSos[0].lat, filteredSos[0].lng)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-1.5 px-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold flex items-center justify-center gap-1 no-underline shadow-lg shadow-rose-950/50 transition-all border border-rose-400/50"
+                  style={{ color: '#ffffff' }}
+                >
+                  <Navigation className="w-3.5 h-3.5 text-white" />
+                  <span>กู้ภัยนำทาง 🧭</span>
                 </a>
               </div>
-              <div className="text-xs text-amber-300 font-medium truncate">
-                ต้องการ: {Array.isArray(filteredSos[0].urgentNeeds) ? filteredSos[0].urgentNeeds.join(', ') : filteredSos[0].urgentNeeds}
-              </div>
-              {filteredSos[0].address && (
-                <div className="text-[11px] text-slate-400 truncate">
-                  พิกัด/ที่อยู่: {filteredSos[0].address}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-slate-800">
-              <button
-                onClick={() => {
-                  setMapCenter([filteredSos[0].lat, filteredSos[0].lng]);
-                  setMapZoom(16);
-                }}
-                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center justify-center gap-1 border border-slate-700 transition-colors"
-              >
-                <Crosshair className="w-3.5 h-3.5 text-rose-400" />
-                <span>ซูมไปจุดนี้</span>
-              </button>
-              <a
-                href={getGoogleMapsDirectionsUrl(filteredSos[0].lat, filteredSos[0].lng)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 py-1.5 px-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold flex items-center justify-center gap-1 no-underline shadow-lg shadow-rose-950/50 transition-all border border-rose-400/50"
-                style={{ color: '#ffffff' }}
-              >
-                <Navigation className="w-3.5 h-3.5 text-white" />
-                <span>กู้ภัยนำทาง 🧭</span>
-              </a>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* 📱 Mobile Separate Detail Popup Modal (ป๊อปอัปแยกสำหรับมือถือ ไม่ทับซ้อนแผนที่) */}
       {mobileDetailItem && (
@@ -2277,6 +2770,17 @@ export default function FloodMap({
                       <Phone className="w-4 h-4 animate-bounce" />
                       <span>📞 โทรขอความช่วยเหลือทันที: {rc.phone}</span>
                     </a>
+
+                    {rc.secondaryPhone && (
+                      <a
+                        href={`tel:${rc.secondaryPhone}`}
+                        className="w-full flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs no-underline border border-slate-700 shadow-sm active:scale-95"
+                        style={{ color: '#ffffff', textDecoration: 'none' }}
+                      >
+                        <Phone className="w-3.5 h-3.5 text-amber-400" />
+                        <span>สายด่วนสำรอง: {rc.secondaryPhone}</span>
+                      </a>
+                    )}
 
                     <div className="bg-slate-800/80 border border-slate-700/80 p-3 rounded-2xl text-xs space-y-1.5">
                       <div>

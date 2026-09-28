@@ -1,7 +1,20 @@
 import L from 'leaflet';
 
-// Custom SVG-based DivIcons for reliable rendering without asset path issues
+// In-memory icon cache to prevent recreating DOM nodes on every render cycle
+const markerIconCache = new Map();
+
 export function createCustomMarkerIcon(type, options = {}) {
+  const cacheKey = `${type}_${options.label || ''}_${options.isOnline || ''}_${options.subType || ''}_${options.status || ''}`;
+  if (markerIconCache.has(cacheKey)) {
+    return markerIconCache.get(cacheKey);
+  }
+  const icon = _buildCustomMarkerIcon(type, options);
+  markerIconCache.set(cacheKey, icon);
+  return icon;
+}
+
+// Custom SVG-based DivIcons for reliable rendering without asset path issues
+function _buildCustomMarkerIcon(type, options = {}) {
   let bgColor = '#ef4444'; // red default
   let borderColor = '#991b1b';
   let iconSvg = '';

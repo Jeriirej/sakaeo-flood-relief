@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e11d48"/>
+      <stop offset="50%" stop-color="#be123c"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="water512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <filter id="shadow512" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- App Rounded Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg512)"/>
+
+  <!-- Shield Shape -->
+  <g filter="url(#shadow512)">
+    <path d="M256 74 L395 128 C395 266 336 368 256 416 C176 368 117 266 117 128 Z" fill="#ffffff" fill-opacity="0.95"/>
+    <path d="M256 90 L379 138 C379 261 325 352 256 395 C187 352 133 261 133 138 Z" fill="#0f172a"/>
+  </g>
+
+  <!-- Water Waves Inside Shield -->
+  <path d="M160 272 C 192 250, 224 294, 256 272 C 288 250, 320 294, 352 272 C 352 325, 315 368, 256 395 C 197 368, 160 325, 160 272 Z" fill="url(#water512)"/>
+  <path d="M170 309 C 197 294, 229 325, 256 309 C 283 294, 315 325, 342 309 C 331 336, 299 368, 256 387 C 213 368, 181 336, 170 309 Z" fill="#0284c7" opacity="0.8"/>
+
+  <!-- Warning Exclamation -->
+  <g fill="#f43f5e" filter="url(#shadow512)">
+    <rect x="243" y="149" width="26" height="80" rx="13"/>
+    <circle cx="256" cy="251" r="13"/>
+  </g>
+</svg>

@@ -15,7 +15,8 @@ import {
   MessageSquare,
   BookOpen,
   Menu,
-  X
+  X,
+  Download
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -107,12 +108,9 @@ export default function Navbar({
                   <span className="inline sm:hidden">สระแก้ว สู้ภัย</span>
                   <span className="hidden sm:inline">สระแก้ว สู้ภัยน้ำท่วม</span>
                 </span>
-                <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-rose-600/30 text-rose-400 border border-rose-500/30 shrink-0">
-                  LIVE
-                </span>
               </div>
               <p className="text-[10px] text-slate-400 -mt-0.5 hidden sm:block truncate">
-                ระบบรวบรวมข้อมูล
+                ระบบรวบรวมข้อมูลโดยประชาชน
               </p>
             </div>
           </div>
@@ -338,132 +336,160 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Mobile Drawer Dropdown Menu (Clean 2-Column Grid) */}
+      {/* Mobile Drawer Dropdown Menu (Floats over content - Zero layout shift!) */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-slate-900/98 border-t border-slate-800/90 px-3 py-3 shadow-2xl backdrop-blur-md animate-in slide-in-from-top-2 duration-150">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs">
-            <span className="font-bold text-slate-300 flex items-center gap-1.5">
-              <span>⚡</span> เมนูเครื่องมือและบริการ
-            </span>
-            <button 
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              aria-label="ปิดเมนู"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        <>
+          {/* Backdrop overlay - tap outside to close */}
+          <div 
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+
+          {/* Floating Overlay Menu Card */}
+          <div className="md:hidden absolute top-full left-0 right-0 z-50 bg-slate-900/98 border-b-2 border-slate-700/90 px-3 py-3 shadow-2xl backdrop-blur-xl animate-in slide-in-from-top-2 duration-150 max-h-[80vh] overflow-y-auto">
+            <div className="max-w-md mx-auto">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs">
+                <span className="font-bold text-white flex items-center gap-1.5">
+                  <span className="text-amber-400">⚡</span> เมนูเครื่องมือและบริการ
+                </span>
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                  aria-label="ปิดเมนู"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {/* 1. เช็กเส้นทาง */}
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); onOpenRouteChecker(); }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                    <Compass className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-cyan-300 truncate">เช็กเส้นทาง</div>
+                    <div className="text-[10px] text-slate-400 truncate">ตรวจทางปลอดภัย</div>
+                  </div>
+                </button>
+
+                {/* 2. แจ้งน้ำท่วม */}
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); onOpenReportModal(); }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-amber-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-950 border border-amber-500/30 flex items-center justify-center shrink-0">
+                    <PlusCircle className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-amber-300 truncate">แจ้งน้ำท่วม</div>
+                    <div className="text-[10px] text-slate-400 truncate">จุดเสี่ยง/น้ำท่วม</div>
+                  </div>
+                </button>
+
+                {/* 3. จุดแจก/รับบริจาค */}
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); onOpenDonationModal(); }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-orange-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-orange-950 border border-orange-500/30 flex items-center justify-center shrink-0">
+                    <HeartHandshake className="w-4 h-4 text-orange-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-orange-300 truncate">จุดแจก/บริจาค</div>
+                    <div className="text-[10px] text-slate-400 truncate">โรงครัว & รับของ</div>
+                  </div>
+                </button>
+
+                {/* 4. ข้อควรระวัง */}
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); onOpenSafetyModal(); }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-amber-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-950 border border-amber-500/30 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-amber-300 truncate">ข้อควรระวัง</div>
+                    <div className="text-[10px] text-slate-400 truncate">ไฟดูด/สัตว์มีพิษ</div>
+                  </div>
+                </button>
+
+                {/* 5. ข้อเสนอแนะ */}
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); onOpenFeedbackModal(); }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                    <MessageSquare className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-cyan-300 truncate">ข้อเสนอแนะ</div>
+                    <div className="text-[10px] text-slate-400 truncate">แจ้งปรับปรุงระบบ</div>
+                  </div>
+                </button>
+
+                {/* 6. คู่มือแนะนำวิธีใช้งาน */}
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); onOpenGuideModal(); }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-sky-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-sky-950 border border-sky-500/30 flex items-center justify-center shrink-0">
+                    <BookOpen className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-sky-300 truncate">คู่มือใช้งาน</div>
+                    <div className="text-[10px] text-slate-400 truncate">สอนใช้เว็บ 1 นาที</div>
+                  </div>
+                </button>
+
+                {/* 7. โหมดประหยัดแบต */}
+                <button
+                  onClick={() => { onToggleBatterySaver(); }}
+                  className={`flex items-center gap-2 p-2.5 rounded-xl border text-left active:scale-[0.98] transition-all ${
+                    batterySaver 
+                      ? 'bg-emerald-950/80 border-emerald-500/60' 
+                      : 'bg-slate-800/90 border-slate-700 hover:border-slate-500'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
+                    batterySaver ? 'bg-emerald-900 border-emerald-400/50' : 'bg-slate-700/60 border-slate-600'
+                  }`}>
+                    <Battery className={`w-4 h-4 ${batterySaver ? 'text-emerald-300' : 'text-slate-400'}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className={`font-bold truncate ${batterySaver ? 'text-emerald-300' : 'text-slate-300'}`}>
+                      {batterySaver ? 'ประหยัดแบต: เปิด' : 'ประหยัดแบต: ปิด'}
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      {batterySaver ? 'กำลังลดพลังงาน' : 'แตะเพื่อเปิดโหมด'}
+                    </div>
+                  </div>
+                </button>
+
+                {/* 8. ติดตั้งลงมือถือ (PWA) */}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+                  }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-rose-950/80 to-slate-800 border border-rose-500/50 hover:border-rose-400 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-rose-900/60 border border-rose-500/40 flex items-center justify-center shrink-0">
+                    <Download className="w-4 h-4 text-rose-300" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-rose-300 truncate">ติดตั้งลงมือถือ</div>
+                    <div className="text-[10px] text-slate-300 truncate">เปิดเต็มจอเป็นแอป</div>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            {/* 1. เช็กเส้นทาง */}
-            <button
-              onClick={() => { setIsMobileMenuOpen(false); onOpenRouteChecker(); }}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
-            >
-              <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-500/30 flex items-center justify-center shrink-0">
-                <Compass className="w-4 h-4 text-cyan-400" />
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold text-cyan-300 truncate">เช็กเส้นทาง</div>
-                <div className="text-[10px] text-slate-400 truncate">ตรวจทางปลอดภัย</div>
-              </div>
-            </button>
-
-            {/* 2. แจ้งน้ำท่วม */}
-            <button
-              onClick={() => { setIsMobileMenuOpen(false); onOpenReportModal(); }}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-amber-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
-            >
-              <div className="w-8 h-8 rounded-lg bg-amber-950 border border-amber-500/30 flex items-center justify-center shrink-0">
-                <PlusCircle className="w-4 h-4 text-amber-400" />
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold text-amber-300 truncate">แจ้งน้ำท่วม</div>
-                <div className="text-[10px] text-slate-400 truncate">จุดเสี่ยง/น้ำท่วม</div>
-              </div>
-            </button>
-
-            {/* 3. จุดแจก/รับบริจาค */}
-            <button
-              onClick={() => { setIsMobileMenuOpen(false); onOpenDonationModal(); }}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-orange-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
-            >
-              <div className="w-8 h-8 rounded-lg bg-orange-950 border border-orange-500/30 flex items-center justify-center shrink-0">
-                <HeartHandshake className="w-4 h-4 text-orange-400" />
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold text-orange-300 truncate">จุดแจก/บริจาค</div>
-                <div className="text-[10px] text-slate-400 truncate">โรงครัว & รับของ</div>
-              </div>
-            </button>
-
-            {/* 4. ข้อควรระวัง */}
-            <button
-              onClick={() => { setIsMobileMenuOpen(false); onOpenSafetyModal(); }}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-amber-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
-            >
-              <div className="w-8 h-8 rounded-lg bg-amber-950 border border-amber-500/30 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-4 h-4 text-amber-400" />
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold text-amber-300 truncate">ข้อควรระวัง</div>
-                <div className="text-[10px] text-slate-400 truncate">ไฟดูด/สัตว์มีพิษ</div>
-              </div>
-            </button>
-
-            {/* 5. ข้อเสนอแนะ */}
-            <button
-              onClick={() => { setIsMobileMenuOpen(false); onOpenFeedbackModal(); }}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
-            >
-              <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-500/30 flex items-center justify-center shrink-0">
-                <MessageSquare className="w-4 h-4 text-cyan-400" />
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold text-cyan-300 truncate">ข้อเสนอแนะ</div>
-                <div className="text-[10px] text-slate-400 truncate">แจ้งปรับปรุงระบบ</div>
-              </div>
-            </button>
-
-            {/* 6. คู่มือแนะนำวิธีใช้งาน */}
-            <button
-              onClick={() => { setIsMobileMenuOpen(false); onOpenGuideModal(); }}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/90 border border-slate-700 hover:border-sky-500/50 hover:bg-slate-800 text-left active:scale-[0.98] transition-all"
-            >
-              <div className="w-8 h-8 rounded-lg bg-sky-950 border border-sky-500/30 flex items-center justify-center shrink-0">
-                <BookOpen className="w-4 h-4 text-sky-400" />
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold text-sky-300 truncate">คู่มือใช้งาน</div>
-                <div className="text-[10px] text-slate-400 truncate">สอนใช้เว็บ 1 นาที</div>
-              </div>
-            </button>
-
-            {/* 6. โหมดประหยัดแบต */}
-            <button
-              onClick={() => { onToggleBatterySaver(); }}
-              className={`flex items-center gap-2 p-2.5 rounded-xl border text-left active:scale-[0.98] transition-all ${
-                batterySaver 
-                  ? 'bg-emerald-950/80 border-emerald-500/60' 
-                  : 'bg-slate-800/90 border-slate-700 hover:border-slate-500'
-              }`}
-            >
-              <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
-                batterySaver ? 'bg-emerald-900 border-emerald-400/50' : 'bg-slate-700/60 border-slate-600'
-              }`}>
-                <Battery className={`w-4 h-4 ${batterySaver ? 'text-emerald-300' : 'text-slate-400'}`} />
-              </div>
-              <div className="min-w-0">
-                <div className={`font-bold truncate ${batterySaver ? 'text-emerald-300' : 'text-slate-300'}`}>
-                  {batterySaver ? 'ประหยัดแบต: เปิด' : 'ประหยัดแบต: ปิด'}
-                </div>
-                <div className="text-[10px] text-slate-400 truncate">
-                  {batterySaver ? 'กำลังลดพลังงาน' : 'แตะเพื่อเปิดโหมด'}
-                </div>
-              </div>
-            </button>
-          </div>
-        </div>
+        </>
       )}
 
     </header>
