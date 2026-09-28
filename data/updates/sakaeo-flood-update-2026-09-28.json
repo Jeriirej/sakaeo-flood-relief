@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-28",
+  "time": "20:00",
+  "affectedDistricts": 7,
+  "affectedSubdistricts": 27,
+  "affectedVillages": 163,
+  "affectedHouseholds": 8716,
+  "casualties": 5,
+  "pwaWaterCutoffUntil": "2026-09-30T24:00:00.000Z",
+  "railwayStatus": "CLOSED: Sakaeo - Ban Klong Luek Border",
+  "reservoirStatus": "Klong Phra Satheung Dam stable, not breached, spilling over 117-130%",
+  "militarySupport": "Burapha Taskforce & 19th Military Circle deploying Unimog high-chassis trucks and supply drones",
+  "updatedAt": "2026-09-28T13:09:00.237Z"
+}
